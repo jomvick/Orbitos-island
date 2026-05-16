@@ -166,7 +166,7 @@ async fn persist_events_loop(state: Arc<DaemonState>, db: Arc<Mutex<Database>>) 
                         let session_id = event.session_id.clone();
                         {
                             let db = db.lock().await;
-                            let _ = db.insert_event(&*event);
+                            let _ = db.insert_event(&event);
                         }
                         let session = {
                             let session_state = state.session_state.read().await;

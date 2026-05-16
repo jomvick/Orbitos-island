@@ -5,8 +5,10 @@ use serde::Deserialize;
 pub struct HookInput {
     pub source: Option<String>,
     pub event: Option<serde_json::Value>,
+    #[allow(dead_code)]
     pub session_id: Option<String>,
     pub timestamp: Option<DateTime<Utc>>,
+    #[allow(dead_code)]
     pub metadata: Option<serde_json::Value>,
 }
 

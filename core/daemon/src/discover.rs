@@ -81,11 +81,13 @@ static AGENTS: &[AgentConfig] = &[
     },
 ];
 
+type ConfigInstallFn = fn(&AgentConfig) -> Result<bool, String>;
+
 struct AgentConfig {
     name: &'static str,
     binaries: &'static [&'static str],
     hooks_supported: bool,
-    config_install: Option<fn(&AgentConfig) -> Result<bool, String>>,
+    config_install: Option<ConfigInstallFn>,
 }
 
 fn find_binary(name: &str) -> Option<String> {
@@ -269,11 +271,11 @@ pub fn discover_agents() -> DiscoverResult {
         let message = if !installed {
             format!("{} not found in PATH", agent.name)
         } else if agent.hooks_supported && hooks_installed {
-            format!("hooks installed and active")
+            "hooks installed and active".to_string()
         } else if agent.hooks_supported {
-            format!("binary found but hooks may not be configured")
+            "binary found but hooks may not be configured".to_string()
         } else {
-            format!("binary found — use agentos-hook manually to send events")
+            "binary found — use agentos-hook manually to send events".to_string()
         };
 
         if installed {
@@ -321,6 +323,7 @@ fn agent_config_path(name: &str) -> Option<String> {
     }
 }
 
+#[allow(dead_code)]
 pub fn find_all_binaries() -> HashMap<String, Vec<String>> {
     let mut result = HashMap::new();
     for agent in AGENTS {
@@ -378,7 +381,6 @@ mod tests {
 
     #[test]
     fn test_find_all_binaries() {
-        let bins = find_all_binaries();
-        assert!(bins.contains_key("claude") || true);
+        let _bins = find_all_binaries();
     }
 }

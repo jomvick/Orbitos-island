@@ -20,7 +20,7 @@ pub fn is_available() -> bool {
 
 pub fn is_in_ghostty() -> bool {
     std::env::var("GHOSTTY_RESOURCES_DIR").is_ok()
-        || std::env::var("TERM_PROGRAM").map_or(false, |v| v == "ghostty")
+        || std::env::var("TERM_PROGRAM").is_ok_and(|v| v == "ghostty")
 }
 
 pub fn list_panes() -> Result<Vec<TerminalPane>, GhosttyError> {
@@ -44,14 +44,12 @@ pub fn list_panes() -> Result<Vec<TerminalPane>, GhosttyError> {
     let panes: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap_or_default();
     let result = panes
         .into_iter()
-        .filter_map(|p| {
-            Some(TerminalPane {
-                pane_id: p.get("id").and_then(|v| v.as_str().map(String::from)),
-                pid: p.get("pid").and_then(|v| v.as_u64().map(|n| n as u32)),
-                command: p.get("command").and_then(|v| v.as_str().map(String::from)),
-                cwd: p.get("cwd").and_then(|v| v.as_str().map(String::from)),
-                session: p.get("tab").and_then(|v| v.as_str().map(String::from)),
-            })
+        .map(|p| TerminalPane {
+            pane_id: p.get("id").and_then(|v| v.as_str().map(String::from)),
+            pid: p.get("pid").and_then(|v| v.as_u64().map(|n| n as u32)),
+            command: p.get("command").and_then(|v| v.as_str().map(String::from)),
+            cwd: p.get("cwd").and_then(|v| v.as_str().map(String::from)),
+            session: p.get("tab").and_then(|v| v.as_str().map(String::from)),
         })
         .collect();
 

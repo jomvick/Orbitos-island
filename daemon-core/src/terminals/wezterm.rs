@@ -22,7 +22,7 @@ pub fn is_available() -> bool {
 }
 
 pub fn is_in_wezterm() -> bool {
-    std::env::var("TERM_PROGRAM").map_or(false, |v| v == "WezTerm")
+    std::env::var("TERM_PROGRAM").is_ok_and(|v| v == "WezTerm")
 }
 
 pub fn list_panes() -> Result<Vec<TerminalPane>, WeztermError> {
@@ -46,18 +46,16 @@ pub fn list_panes() -> Result<Vec<TerminalPane>, WeztermError> {
     let panes: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap_or_default();
     let result = panes
         .into_iter()
-        .filter_map(|p| {
-            Some(TerminalPane {
-                pane_id: p
-                    .get("pane_id")
-                    .and_then(|v| v.as_i64().map(|n| n.to_string())),
-                pid: p.get("pid").and_then(|v| v.as_u64().map(|n| n as u32)),
-                command: p.get("title").and_then(|v| v.as_str().map(String::from)),
-                cwd: p.get("cwd").and_then(|v| v.as_str().map(String::from)),
-                session: p
-                    .get("workspace")
-                    .and_then(|v| v.as_str().map(String::from)),
-            })
+        .map(|p| TerminalPane {
+            pane_id: p
+                .get("pane_id")
+                .and_then(|v| v.as_i64().map(|n| n.to_string())),
+            pid: p.get("pid").and_then(|v| v.as_u64().map(|n| n as u32)),
+            command: p.get("title").and_then(|v| v.as_str().map(String::from)),
+            cwd: p.get("cwd").and_then(|v| v.as_str().map(String::from)),
+            session: p
+                .get("workspace")
+                .and_then(|v| v.as_str().map(String::from)),
         })
         .collect();
 
