@@ -26,6 +26,35 @@ export interface QuestionPrompt {
   created_at: string;
 }
 
+export interface PlanItem {
+  action: string;
+  file?: string;
+  details?: string;
+}
+
+export interface PlanProposal {
+  id: string;
+  summary: string;
+  items: PlanItem[];
+  reasoning?: string;
+  created_at: string;
+}
+
+export interface FileDiff {
+  file_path: string;
+  diff_content: string;
+  language?: string;
+  status?: string;
+}
+
+export interface DiffPayload {
+  id: string;
+  session_id: string;
+  files: FileDiff[];
+  summary?: string;
+  created_at: string;
+}
+
 export interface AgentSession {
   id: string;
   agent: AgentKind;
@@ -41,6 +70,8 @@ export interface AgentSession {
   permission?: PermissionRequest;
   question?: QuestionPrompt;
   jump_target?: JumpTarget;
+  plan?: PlanProposal;
+  diff?: DiffPayload;
   error?: string;
   metadata?: Record<string, unknown>;
   created_at: string;
@@ -65,6 +96,8 @@ export interface UniversalEvent {
   permission?: PermissionRequest;
   question?: QuestionPrompt;
   jump_target?: JumpTarget;
+  plan?: PlanProposal;
+  diff?: DiffPayload;
   error?: string;
   metadata?: Record<string, unknown>;
   timestamp: string;

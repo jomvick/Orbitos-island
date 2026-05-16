@@ -98,7 +98,13 @@ pub fn event_to_notification(event: &UniversalEvent) -> Option<Notification> {
 
         EventKind::JumpTargetUpdated
         | EventKind::ActionableStateResolved
-        | EventKind::SessionPaused => None,
+        | EventKind::SessionPaused
+        | EventKind::PlanProposed
+        | EventKind::PlanApproved
+        | EventKind::PlanRejected
+        | EventKind::DiffAvailable
+        | EventKind::DiffApplied
+        | EventKind::DiffRejected => None,
     }
 }
 
@@ -174,6 +180,8 @@ mod tests {
                 created_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
             }),
             jump_target: None,
+            plan: None,
+            diff: None,
             error: error.map(String::from),
             metadata: None,
             timestamp: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),

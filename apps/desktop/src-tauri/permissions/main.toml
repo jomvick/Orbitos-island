@@ -13,5 +13,6 @@ commands.allow = [
     "jump_to_session",
     "stop_agent",
     "shutdown",
+    "discover_agents",
     "ping"
 ]

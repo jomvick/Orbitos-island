@@ -67,6 +67,7 @@ pub enum IpcCommand {
     SearchSessions {
         query: String,
     },
+    DiscoverAgents,
     Shutdown,
     Ping,
 }

@@ -101,6 +101,8 @@ impl AgentPlugin for OpenCodePlugin {
                     permission: permission_req,
                     question: None,
                     jump_target: None,
+                    plan: None,
+                    diff: None,
                     error,
                     metadata,
                     timestamp: Utc::now(),

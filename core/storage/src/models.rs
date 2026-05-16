@@ -37,6 +37,8 @@ impl StoredSession {
             permission: None,
             question: None,
             jump_target: None,
+            plan: None,
+            diff: None,
             error: self.error.clone(),
             metadata: self
                 .metadata

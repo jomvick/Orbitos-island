@@ -4,12 +4,13 @@ import { AgentPill } from "./AgentPill";
 import { SearchBar } from "./SearchBar";
 import { groupSessions, type GroupBy } from "../utils/sessionGrouping";
 import { motion, AnimatePresence } from "framer-motion";
+import { PlanDiffView } from "./PlanDiffView";
 
 const Timeline = lazy(() => import("./Timeline").then(m => ({ default: m.Timeline })));
 const AnalyticsPanel = lazy(() => import("./AnalyticsPanel").then(m => ({ default: m.AnalyticsPanel })));
 const ActivityGraph = lazy(() => import("./ActivityGraph").then(m => ({ default: m.ActivityGraph })));
 
-type Tab = "sessions" | "timeline" | "analytics" | "graphs";
+type Tab = "sessions" | "timeline" | "analytics" | "graphs" | "plans";
 
 const tabVariants = {
   enter: (dir: number) => ({
@@ -34,6 +35,7 @@ const TAB_LABELS: [Tab, string][] = [
   ["timeline", "Timeline"],
   ["analytics", "Analytics"],
   ["graphs", "Graphs"],
+  ["plans", "Plans"],
 ];
 
 function TabPanel({ tab, tabDir, children }: { tab: Tab; tabDir: number; children: React.ReactNode }) {
@@ -165,6 +167,11 @@ export function Dashboard({ embedded }: { embedded?: boolean }) {
             {tab === "graphs" && (
               <TabPanel tab={tab} tabDir={tabDir}>
                 <ActivityGraph sessions={filteredSessions} />
+              </TabPanel>
+            )}
+            {tab === "plans" && (
+              <TabPanel tab={tab} tabDir={tabDir}>
+                <PlanDiffView sessions={filteredSessions} />
               </TabPanel>
             )}
             {tab === "sessions" && (

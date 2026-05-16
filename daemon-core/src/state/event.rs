@@ -83,6 +83,12 @@ pub enum EventKind {
     TokenUsage,
     JumpTargetUpdated,
     ActionableStateResolved,
+    PlanProposed,
+    PlanApproved,
+    PlanRejected,
+    DiffAvailable,
+    DiffApplied,
+    DiffRejected,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -165,6 +171,39 @@ pub struct TokenUsage {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanItem {
+    pub action: String,
+    pub file: Option<String>,
+    pub details: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlanProposal {
+    pub id: Uuid,
+    pub summary: String,
+    pub items: Vec<PlanItem>,
+    pub reasoning: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileDiff {
+    pub file_path: String,
+    pub diff_content: String,
+    pub language: Option<String>,
+    pub status: Option<String>, // "modified", "created", "deleted"
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiffPayload {
+    pub id: Uuid,
+    pub session_id: String,
+    pub files: Vec<FileDiff>,
+    pub summary: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UniversalEvent {
     pub id: Uuid,
     pub agent: AgentKind,
@@ -181,6 +220,8 @@ pub struct UniversalEvent {
     pub permission: Option<PermissionRequest>,
     pub question: Option<QuestionPrompt>,
     pub jump_target: Option<JumpTarget>,
+    pub plan: Option<PlanProposal>,
+    pub diff: Option<DiffPayload>,
     pub error: Option<String>,
     pub metadata: Option<serde_json::Value>,
     pub timestamp: DateTime<Utc>,
@@ -210,6 +251,12 @@ impl fmt::Display for EventKind {
             EventKind::TokenUsage => "token_usage",
             EventKind::JumpTargetUpdated => "jump_target_updated",
             EventKind::ActionableStateResolved => "actionable_state_resolved",
+            EventKind::PlanProposed => "plan_proposed",
+            EventKind::PlanApproved => "plan_approved",
+            EventKind::PlanRejected => "plan_rejected",
+            EventKind::DiffAvailable => "diff_available",
+            EventKind::DiffApplied => "diff_applied",
+            EventKind::DiffRejected => "diff_rejected",
         };
         write!(f, "{}", s)
     }

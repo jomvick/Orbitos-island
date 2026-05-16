@@ -1,4 +1,5 @@
 mod cli;
+mod discover;
 mod notifier;
 mod plugin_loader;
 mod server;
@@ -21,7 +22,13 @@ use crate::server::{handle_client, DaemonState};
 #[tokio::main]
 async fn main() {
     let mut args = CliArgs::parse();
-    
+
+    if args.discover {
+        let result = discover::discover_agents();
+        println!("{}", serde_json::to_string_pretty(&result).unwrap());
+        return;
+    }
+
     // Resolve socket path
     if !args.socket_path.is_absolute() {
         let home = std::env::var("HOME").expect("HOME env var not set");

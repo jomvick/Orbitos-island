@@ -70,6 +70,8 @@ mod tests {
             permission: None,
             question: None,
             jump_target: None,
+            plan: None,
+            diff: None,
             error: None,
             metadata: None,
             timestamp: Utc::now(),

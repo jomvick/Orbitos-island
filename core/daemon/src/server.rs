@@ -181,6 +181,12 @@ async fn handle_command(
                 .await;
         }
 
+        IpcCommand::DiscoverAgents => {
+            let result = crate::discover::discover_agents();
+            let data = serde_json::to_value(&result).unwrap_or_default();
+            let _ = codec.send(&IpcMessage::new_response(id, Some(data))).await;
+        }
+
         IpcCommand::Shutdown => {
             info!("shutdown requested via IPC");
             let _ = codec.send(&IpcMessage::new_response(id, None)).await;
@@ -389,6 +395,8 @@ async fn handle_command(
                         permission: None,
                         question: None,
                         jump_target: None,
+                        plan: None,
+                        diff: None,
                         error: None,
                         metadata: Some(serde_json::json!({
                             "resolved_by": "user",
@@ -463,6 +471,8 @@ async fn handle_command(
                         permission: None,
                         question: None,
                         jump_target: None,
+                        plan: None,
+                        diff: None,
                         error: None,
                         metadata: Some(serde_json::json!({
                             "resolved_by": "user",
@@ -487,7 +497,7 @@ async fn handle_command(
                     let _ = codec
                         .send(&IpcMessage::new_response(
                             id,
-                            Some(serde_json::json!({"status": "answered", "session_id": sid})),
+                            Some(serde_json::json!({"status": "resolved", "session_id": sid})),
                         ))
                         .await;
                 }
@@ -495,7 +505,7 @@ async fn handle_command(
                     let _ = codec
                         .send(&IpcMessage::new_error(
                             id,
-                            "question not found".to_string(),
+                            "permission not found".to_string(),
                         ))
                         .await;
                 }
@@ -525,6 +535,8 @@ async fn handle_command(
                     permission: None,
                     question: None,
                     jump_target: None,
+                    plan: None,
+                    diff: None,
                     error: Some("stopped by user".to_string()),
                     metadata: Some(serde_json::json!({
                         "stopped_by": "user"

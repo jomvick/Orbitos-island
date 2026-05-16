@@ -27,4 +27,7 @@ pub struct CliArgs {
 
     #[arg(long = "db-in-memory")]
     pub db_in_memory: bool,
+
+    #[arg(long = "discover", help = "Run agent discovery and exit")]
+    pub discover: bool,
 }

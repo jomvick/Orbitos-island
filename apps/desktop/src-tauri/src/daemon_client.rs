@@ -256,3 +256,11 @@ pub async fn shutdown() -> Result<serde_json::Value, String> {
     });
     send_command(command_action).await
 }
+
+#[tauri::command]
+pub async fn discover_agents() -> Result<serde_json::Value, String> {
+    let command_action = serde_json::json!({
+        "action": "discover_agents"
+    });
+    send_command(command_action).await
+}

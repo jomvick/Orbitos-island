@@ -87,6 +87,8 @@ impl AgentPlugin for CursorPlugin {
             jump_target: None,
             error: hook.error,
             metadata: hook.metadata,
+            plan: None,
+            diff: None,
             timestamp: Utc::now(),
         }))
     }

@@ -9,7 +9,13 @@ export type EventKind =
   | "heartbeat"
   | "token_usage"
   | "jump_target_updated"
-  | "actionable_state_resolved";
+  | "actionable_state_resolved"
+  | "plan_proposed"
+  | "plan_approved"
+  | "plan_rejected"
+  | "diff_available"
+  | "diff_applied"
+  | "diff_rejected";
 
 export type SessionPhase =
   | "running"

@@ -94,6 +94,7 @@ pub fn run() {
             daemon_client::jump_to_session,
             daemon_client::stop_agent,
             daemon_client::shutdown,
+            daemon_client::discover_agents,
             daemon_client::ping,
             set_ignore_cursor
         ])

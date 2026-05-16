@@ -68,6 +68,8 @@ impl AgentPlugin for CopilotPlugin {
             jump_target: None,
             error: hook.error,
             metadata: hook.metadata,
+            plan: None,
+            diff: None,
             timestamp: Utc::now(),
         }))
     }

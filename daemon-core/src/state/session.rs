@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use super::event::{
-    AgentKind, EventKind, JumpTarget, PermissionRequest, QuestionPrompt, SessionPhase,
-    UniversalEvent,
+    AgentKind, DiffPayload, EventKind, JumpTarget, PermissionRequest, PlanProposal, QuestionPrompt,
+    SessionPhase, UniversalEvent,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -23,6 +23,8 @@ pub struct AgentSession {
     pub permission: Option<PermissionRequest>,
     pub question: Option<QuestionPrompt>,
     pub jump_target: Option<JumpTarget>,
+    pub plan: Option<PlanProposal>,
+    pub diff: Option<DiffPayload>,
     pub error: Option<String>,
     pub metadata: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
@@ -48,6 +50,8 @@ impl AgentSession {
             permission: None,
             question: None,
             jump_target: event.jump_target.clone(),
+            plan: event.plan.clone(),
+            diff: event.diff.clone(),
             error: None,
             metadata: event.metadata.clone(),
             created_at: event.timestamp,
@@ -134,6 +138,8 @@ mod tests {
             permission: None,
             question: None,
             jump_target: None,
+            plan: None,
+            diff: None,
             error: None,
             metadata: None,
             timestamp: Utc::now(),
@@ -515,6 +521,126 @@ mod tests {
     }
 
     #[test]
+    fn test_plan_proposed_sets_plan() {
+        let state = SessionState::new();
+        let start = make_event("sess-1", EventKind::SessionStarted, AgentKind::Claude);
+        let state = apply_event(state, start);
+
+        let plan = PlanProposal {
+            id: Uuid::new_v4(),
+            summary: "Refactor auth module".to_string(),
+            items: vec![
+                PlanItem {
+                    action: "Extract login logic".to_string(),
+                    file: Some("src/auth.rs".to_string()),
+                    details: Some("Move login validation to separate function".to_string()),
+                },
+                PlanItem {
+                    action: "Add JWT middleware".to_string(),
+                    file: Some("src/middleware.rs".to_string()),
+                    details: None,
+                },
+            ],
+            reasoning: Some("The auth module is too large".to_string()),
+            created_at: Utc::now(),
+        };
+
+        let proposed = UniversalEvent {
+            plan: Some(plan.clone()),
+            ..make_event("sess-1", EventKind::PlanProposed, AgentKind::Claude)
+        };
+        let state = apply_event(state, proposed);
+
+        let session = state.sessions.get("sess-1").unwrap();
+        assert!(session.plan.is_some());
+        assert_eq!(session.plan.as_ref().unwrap().summary, "Refactor auth module");
+        assert_eq!(session.plan.as_ref().unwrap().items.len(), 2);
+    }
+
+    #[test]
+    fn test_plan_approved_clears_plan() {
+        let state = SessionState::new();
+        let start = make_event("sess-1", EventKind::SessionStarted, AgentKind::Claude);
+        let state = apply_event(state, start);
+
+        let plan = PlanProposal {
+            id: Uuid::new_v4(),
+            summary: "Test plan".to_string(),
+            items: vec![],
+            reasoning: None,
+            created_at: Utc::now(),
+        };
+
+        let proposed = UniversalEvent {
+            plan: Some(plan),
+            ..make_event("sess-1", EventKind::PlanProposed, AgentKind::Claude)
+        };
+        let state = apply_event(state, proposed);
+        assert!(state.sessions.get("sess-1").unwrap().plan.is_some());
+
+        let approved = make_event("sess-1", EventKind::PlanApproved, AgentKind::Claude);
+        let state = apply_event(state, approved);
+        assert!(state.sessions.get("sess-1").unwrap().plan.is_none());
+    }
+
+    #[test]
+    fn test_diff_available_sets_diff() {
+        let state = SessionState::new();
+        let start = make_event("sess-1", EventKind::SessionStarted, AgentKind::Codex);
+        let state = apply_event(state, start);
+
+        let diff = DiffPayload {
+            id: Uuid::new_v4(),
+            session_id: "sess-1".to_string(),
+            files: vec![FileDiff {
+                file_path: "src/main.rs".to_string(),
+                diff_content: "--- a/src/main.rs\n+++ b/src/main.rs\n@@ -1 +1 @@\n-hello\n+hello world".to_string(),
+                language: Some("rust".to_string()),
+                status: Some("modified".to_string()),
+            }],
+            summary: Some("Added greeting".to_string()),
+            created_at: Utc::now(),
+        };
+
+        let available = UniversalEvent {
+            diff: Some(diff.clone()),
+            ..make_event("sess-1", EventKind::DiffAvailable, AgentKind::Codex)
+        };
+        let state = apply_event(state, available);
+
+        let session = state.sessions.get("sess-1").unwrap();
+        assert!(session.diff.is_some());
+        assert_eq!(session.diff.as_ref().unwrap().files.len(), 1);
+        assert_eq!(session.diff.as_ref().unwrap().files[0].file_path, "src/main.rs");
+    }
+
+    #[test]
+    fn test_diff_applied_clears_diff() {
+        let state = SessionState::new();
+        let start = make_event("sess-1", EventKind::SessionStarted, AgentKind::Codex);
+        let state = apply_event(state, start);
+
+        let diff = DiffPayload {
+            id: Uuid::new_v4(),
+            session_id: "sess-1".to_string(),
+            files: vec![],
+            summary: None,
+            created_at: Utc::now(),
+        };
+
+        let available = UniversalEvent {
+            diff: Some(diff),
+            ..make_event("sess-1", EventKind::DiffAvailable, AgentKind::Codex)
+        };
+        let state = apply_event(state, available);
+        assert!(state.sessions.get("sess-1").unwrap().diff.is_some());
+
+        let applied = make_event("sess-1", EventKind::DiffApplied, AgentKind::Codex);
+        let state = apply_event(state, applied);
+        assert!(state.sessions.get("sess-1").unwrap().diff.is_none());
+    }
+
+    #[test]
     fn test_multi_agent_lifecycle() {
         let state = SessionState::new();
 
@@ -684,6 +810,44 @@ pub fn apply_event(mut state: SessionState, event: UniversalEvent) -> SessionSta
                 session.phase = SessionPhase::Running;
                 session.permission = None;
                 session.question = None;
+                session.updated_at = event.timestamp;
+            }
+        }
+        EventKind::PlanProposed => {
+            if let Some(session) = state.sessions.get_mut(&session_id) {
+                session.plan = event.plan;
+                session.updated_at = event.timestamp;
+                session.last_heartbeat = event.timestamp;
+            }
+        }
+        EventKind::PlanApproved => {
+            if let Some(session) = state.sessions.get_mut(&session_id) {
+                session.plan = None;
+                session.updated_at = event.timestamp;
+            }
+        }
+        EventKind::PlanRejected => {
+            if let Some(session) = state.sessions.get_mut(&session_id) {
+                session.plan = None;
+                session.updated_at = event.timestamp;
+            }
+        }
+        EventKind::DiffAvailable => {
+            if let Some(session) = state.sessions.get_mut(&session_id) {
+                session.diff = event.diff;
+                session.updated_at = event.timestamp;
+                session.last_heartbeat = event.timestamp;
+            }
+        }
+        EventKind::DiffApplied => {
+            if let Some(session) = state.sessions.get_mut(&session_id) {
+                session.diff = None;
+                session.updated_at = event.timestamp;
+            }
+        }
+        EventKind::DiffRejected => {
+            if let Some(session) = state.sessions.get_mut(&session_id) {
+                session.diff = None;
                 session.updated_at = event.timestamp;
             }
         }
