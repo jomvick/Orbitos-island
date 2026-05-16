@@ -115,13 +115,35 @@ npm install
 npm run tauri dev
 ```
 
-### Install Agent Hooks
+### Auto-Detect & Install
 
 ```bash
-# Automatic hook installer for supported agents
-./scripts/install-hooks.sh
+# Auto-discover installed agents and install hooks
+cargo run --bin agentosd -- --discover
 
-# Or manually for specific agents
+# Or via IPC command (from desktop app)
+# The desktop UI can call discover_agents which returns structured results
+```
+
+Example output:
+```json
+{
+  "total_agents": 9,
+  "installed_count": 5,
+  "hooks_installed_count": 2,
+  "agents": [
+    {"name": "claude", "installed": true, "hooks_installed": true},
+    {"name": "opencode", "installed": true, "hooks_installed": true}
+  ]
+}
+```
+
+Supports auto-config for **Claude Code** and **OpenCode** (native hooks). Other agents report as detected for manual setup.
+
+### Manual Hook Installation
+
+```bash
+./scripts/install-hooks.sh
 agentos-hook --event '{"type":"session_start","agent":"opencode","session_id":"abc"}'
 ```
 
