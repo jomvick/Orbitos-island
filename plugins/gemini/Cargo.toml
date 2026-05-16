@@ -1,0 +1,12 @@
+[package]
+name = "plugin-gemini"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+daemon-core = { path = "../../daemon-core" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+uuid.workspace = true

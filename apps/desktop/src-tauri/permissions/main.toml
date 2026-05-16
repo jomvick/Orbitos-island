@@ -1,0 +1,17 @@
+[[permission]]
+identifier = "main"
+description = "Permissions for main application commands"
+commands.allow = [
+    "get_sessions",
+    "get_session",
+    "get_session_stats",
+    "get_agent_analytics",
+    "get_timeline",
+    "search_sessions",
+    "resolve_permission",
+    "answer_question",
+    "jump_to_session",
+    "stop_agent",
+    "shutdown",
+    "ping"
+]

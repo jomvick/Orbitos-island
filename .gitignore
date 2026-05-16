@@ -1,0 +1,11 @@
+target/
+node_modules/
+.env
+*.log
+*.pid
+*.swp
+.DS_Store
+Thumbs.db
+apps/desktop/node_modules/
+apps/desktop/.tauri/
+apps/desktop/src-tauri/target/

@@ -1,0 +1,85 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --obsidian-950: #08080A;
+    --obsidian-900: #0C0C0E;
+    --obsidian-800: #121214;
+    
+    --accent-blue: #3B82F6;
+    --accent-green: #10B981;
+    --accent-purple: #A855F7;
+    --accent-red: #F43F5E;
+    
+    --glass-border: rgba(255, 255, 255, 0.04);
+    --glass-border-bright: rgba(255, 255, 255, 0.08);
+    --glass-bg: rgba(12, 12, 14, 0.72);
+    --glass-bg-heavy: rgba(5, 5, 5, 0.95);
+    
+    --shadow-premium: 0 25px 60px rgba(0, 0, 0, 0.6);
+    --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.2);
+  }
+
+  html, body, #root {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: transparent !important;
+    font-family: 'Inter', sans-serif;
+    color: #FFFFFF;
+    -webkit-font-smoothing: antialiased;
+  }
+}
+
+@layer components {
+  .glass-pill {
+    @apply bg-obsidian-900/80 backdrop-blur-2xl border border-white/10 shadow-premium ring-1 ring-white/5;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05), var(--shadow-premium);
+  }
+  
+  .glass-card-heavy {
+    @apply bg-obsidian-950/90 backdrop-blur-3xl border border-white/10 shadow-premium;
+    box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.05), var(--shadow-premium);
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
+  }
+}
+
+@keyframes pulse-dot-error {
+  0%, 100% { transform: scale(1); opacity: 0.8; }
+  50% { transform: scale(2.2); opacity: 0; }
+}
+
+@keyframes pulse-dot-warning {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(2); opacity: 0; }
+}
+
+@keyframes pulse-dot-running {
+  0%, 100% { transform: scale(1); opacity: 0.6; }
+  50% { transform: scale(1.6); opacity: 0; }
+}
+
+.dot-pulse-error {
+  animation: pulse-dot-error 1.2s ease-in-out infinite;
+}
+
+.dot-pulse-warning {
+  animation: pulse-dot-warning 1.5s ease-in-out infinite;
+}
+
+.dot-pulse-running {
+  animation: pulse-dot-running 2.5s ease-in-out infinite;
+}

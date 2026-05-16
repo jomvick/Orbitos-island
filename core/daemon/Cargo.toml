@@ -1,0 +1,32 @@
+[package]
+name = "agentosd"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "agentosd"
+path = "src/main.rs"
+
+[dependencies]
+daemon-core = { path = "../../daemon-core" }
+agentos-ipc = { path = "../ipc" }
+agentos-storage = { path = "../storage" }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+notify-rust.workspace = true
+uuid.workspace = true
+plugin-opencode = { path = "../../plugins/opencode" }
+plugin-claude = { path = "../../plugins/claude" }
+plugin-codex = { path = "../../plugins/codex" }
+plugin-antigravity = { path = "../../plugins/antigravity" }
+plugin-aider = { path = "../../plugins/aider" }
+plugin-gemini = { path = "../../plugins/gemini" }
+plugin-cursor = { path = "../../plugins/cursor" }
+plugin-copilot = { path = "../../plugins/copilot" }
+plugin-deepseek = { path = "../../plugins/deepseek" }
