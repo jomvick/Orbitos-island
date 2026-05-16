@@ -317,7 +317,7 @@ mod tests {
     #[test]
     fn test_get_active_sessions() {
         let db = test_db();
-        let mut running = sample_session("opencode");
+        let running = sample_session("opencode");
         let mut completed = sample_session("claude");
         completed.phase = daemon_core::state::SessionPhase::Completed;
         let mut failed = sample_session("codex");
@@ -379,7 +379,7 @@ mod tests {
     #[test]
     fn test_search_sessions() {
         let db = test_db();
-        let mut s1 = sample_session("opencode");
+        let s1 = sample_session("opencode");
         let mut s2 = sample_session("claude");
         s2.cwd = Some("/other".to_string());
         db.upsert_session(&s1).unwrap();

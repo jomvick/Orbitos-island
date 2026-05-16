@@ -240,15 +240,12 @@ async fn test_multiple_clients() {
         for i in 0..num_clients {
             let (mut codec, _fd) = server.accept().await.unwrap();
             let msg = codec.recv().await.unwrap();
-            match msg {
-                IpcMessage::Command { id, .. } => {
-                    let response = IpcMessage::new_response(
-                        id,
-                        Some(serde_json::json!({"client": i})),
-                    );
-                    codec.send(&response).await.unwrap();
-                }
-                _ => {}
+            if let IpcMessage::Command { id, .. } = msg {
+                let response = IpcMessage::new_response(
+                    id,
+                    Some(serde_json::json!({"client": i})),
+                );
+                codec.send(&response).await.unwrap();
             }
         }
     });

@@ -141,6 +141,7 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use uuid::Uuid;
 
+    #[allow(clippy::too_many_arguments)]
     fn make_event(
         kind: EventKind,
         agent: AgentKind,

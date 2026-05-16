@@ -24,7 +24,7 @@ pub fn is_available() -> bool {
 
 pub fn is_in_kitty() -> bool {
     std::env::var("KITTY_WINDOW_ID").is_ok()
-        || std::env::var("TERM").map_or(false, |v| v.contains("kitty"))
+        || std::env::var("TERM").is_ok_and(|v| v.contains("kitty"))
 }
 
 pub fn list_panes() -> Result<Vec<TerminalPane>, KittyError> {

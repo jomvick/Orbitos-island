@@ -372,7 +372,7 @@ async fn handle_command(
                     .find(|(_, s)| {
                         s.permission
                             .as_ref()
-                            .map_or(false, |p| p.id == permission_id)
+                            .is_some_and(|p| p.id == permission_id)
                     })
                     .map(|(id, _)| id.clone())
             };
@@ -448,7 +448,7 @@ async fn handle_command(
                     .find(|(_, s)| {
                         s.question
                             .as_ref()
-                            .map_or(false, |q| q.id == question_id)
+                            .is_some_and(|q| q.id == question_id)
                     })
                     .map(|(id, _)| id.clone())
             };
