@@ -167,7 +167,7 @@ const phaseLabel = !connected
 ? "needs input"
 : active.phase.replace("_", " ");
 
-const targetWidth = isExpanded ? 720 : 280;
+const targetWidth = isExpanded ? 720 : 340;
 
 return (
 <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] pointer-events-none">
