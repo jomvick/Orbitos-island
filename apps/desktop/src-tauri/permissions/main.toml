@@ -14,5 +14,9 @@ commands.allow = [
     "stop_agent",
     "shutdown",
     "discover_agents",
-    "ping"
+    "ping",
+    "set_ignore_cursor",
+    "update_window_size",
+    "start_drag",
+    "ensure_always_on_top"
 ]

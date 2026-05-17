@@ -13,14 +13,14 @@
     "windows": [
       {
         "title": "Orbitos Island",
-        "width": 1920,
-        "height": 600,
+        "width": 364,
+        "height": 78,
         "transparent": true,
         "decorations": false,
         "alwaysOnTop": true,
         "skipTaskbar": true,
         "focusable": true,
-        "resizable": false,
+        "resizable": true,
         "center": false,
         "x": 0,
         "y": 0,

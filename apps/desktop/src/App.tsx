@@ -18,6 +18,9 @@ export default function App() {
   useEffect(() => {
     if (view === "settings") {
       acquire();
+      import("@tauri-apps/api/core").then(({ invoke }) => {
+        invoke("update_window_size", { width: 560, height: 600 }).catch(console.error);
+      });
     } else {
       release();
     }
@@ -37,7 +40,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col items-center pt-4 bg-transparent select-none pointer-events-none w-fit h-screen">
+    <div className="flex flex-col items-center bg-transparent select-none pointer-events-none w-fit h-fit">
       <AnimatePresence mode="wait">
         {view === "main" ? (
           <motion.div
@@ -45,7 +48,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="flex flex-col items-center pointer-events-none w-fit"
+            className="flex flex-col items-center pointer-events-none w-fit h-fit"
           >
             <FloatingBar />
             <Overlay />

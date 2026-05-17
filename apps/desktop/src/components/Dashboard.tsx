@@ -265,7 +265,7 @@ export function Dashboard({ embedded }: { embedded?: boolean }) {
         transition={{ duration: 0.25, ease: "easeInOut" }}
         className="overflow-hidden border-t border-white/5"
       >
-        <div className="flex flex-col max-h-[75vh] overflow-hidden">
+        <div className="flex flex-col h-[580px] overflow-hidden">
           {content}
         </div>
       </motion.div>

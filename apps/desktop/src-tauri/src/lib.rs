@@ -7,9 +7,59 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 
 #[tauri::command]
 fn set_ignore_cursor(app: tauri::AppHandle, ignore: bool) {
-    let window = app.get_webview_window("main").unwrap();
-    let _ = window.set_ignore_cursor_events(ignore);
+    // No-op to preserve always-interactive window behavior under dynamic sizing
 }
+
+#[tauri::command]
+async fn update_window_size(
+    width: f64,
+    height: f64,
+    window: tauri::WebviewWindow,
+) -> Result<(), String> {
+    if width <= 0.0 || height <= 0.0 {
+        return Err(format!("Invalid window dimensions: {}x{}", width, height));
+    }
+
+    // Capture current window size and position to preserve screen centering
+    let current_size = window.outer_size().map_err(|e| e.to_string())?;
+    let current_pos = window.outer_position().map_err(|e| e.to_string())?;
+    let scale_factor = window.current_monitor()
+        .map_err(|e| e.to_string())?
+        .map(|m| m.scale_factor())
+        .unwrap_or(1.0);
+
+    let current_width_logical = current_size.width as f64 / scale_factor;
+    let current_pos_x_logical = current_pos.x as f64 / scale_factor;
+
+    // Calculate new x coordinate to keep the horizontal center stable
+    let dx = width - current_width_logical;
+    let new_x = current_pos_x_logical - (dx / 2.0);
+
+    // Apply new size
+    window.set_size(tauri::Size::Logical(tauri::LogicalSize { width, height }))
+        .map_err(|e| e.to_string())?;
+
+    // Apply new position to maintain center alignment
+    window.set_position(tauri::Position::Logical(tauri::LogicalPosition {
+        x: new_x,
+        y: current_pos.y as f64 / scale_factor,
+    })).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+async fn start_drag(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.start_dragging().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn ensure_always_on_top(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.set_always_on_top(true).map_err(|e| e.to_string())?;
+    window.set_focus().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 
 fn build_tray_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let show = MenuItem::with_id(app, "show", "Show Orbitos Island", true, None::<&str>)?;
@@ -62,6 +112,39 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
+            let window = app.get_webview_window("main").unwrap();
+            let _ = window.set_decorations(false);
+            let _ = window.set_always_on_top(true);
+            let _ = window.set_resizable(true);
+            let _ = window.set_skip_taskbar(true);
+            let _ = window.set_ignore_cursor_events(false);
+
+            // Enforce initial position top-center
+            if let Ok(Some(monitor)) = window.current_monitor() {
+                let monitor_size = monitor.size();
+                let scale_factor = monitor.scale_factor();
+                let monitor_width = monitor_size.width as f64 / scale_factor;
+                
+                let window_width = 364.0;
+                let window_height = 78.0;
+                let x = (monitor_width - window_width) / 2.0;
+                let y = 48.0; // Float beautifully below Gnome's top bar
+                
+                let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize {
+                    width: window_width,
+                    height: window_height,
+                }));
+                let _ = window.set_position(tauri::Position::Logical(tauri::LogicalPosition { x, y }));
+            }
+
+            // Linux/Wayland always-on-top stabilization
+            let window_clone = window.clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(500));
+                let _ = window_clone.set_always_on_top(true);
+                let _ = window_clone.set_focus();
+            });
+
             let handle = app.handle().clone();
             let menu = build_tray_menu(&handle)?;
             let _tray = TrayIconBuilder::new()
@@ -96,7 +179,10 @@ pub fn run() {
             daemon_client::shutdown,
             daemon_client::discover_agents,
             daemon_client::ping,
-            set_ignore_cursor
+            set_ignore_cursor,
+            update_window_size,
+            start_drag,
+            ensure_always_on_top
         ])
         .run(tauri::generate_context!())
         .expect("error while running agentos desktop");

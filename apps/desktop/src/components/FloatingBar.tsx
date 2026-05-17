@@ -109,6 +109,15 @@ failed: "rgba(239,68,68,0.25)",
 
 const HOVER_GRACE_MS = 80;
 
+const safeInvoke = async (cmd: string, args?: any) => {
+  try {
+    const { invoke } = await import("@tauri-apps/api/core");
+    await invoke(cmd, args);
+  } catch (err) {
+    console.error(`Tauri invoke failed for ${cmd}:`, err);
+  }
+};
+
 export function FloatingBar() {
 const sessions = useSessionStore((s) => s.sessions);
 const setExpanded = useSessionStore((s) => s.setExpanded);
@@ -116,9 +125,53 @@ const isExpanded = useSessionStore((s) => s.isExpanded);
 const { connected } = useDaemonConnection();
 const [isHovered, setIsHovered] = useState(false);
 const [isFocused, setIsFocused] = useState(false);
+const [isDragging, setIsDragging] = useState(false);
 const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+const containerRef = useRef<HTMLDivElement>(null);
+const lastSize = useRef({ width: 364, height: 78 });
+const shrinkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+const currentWindowSize = useRef({ width: 364, height: 78 });
 
 const { acquire, release } = useCursorEvents("floatingbar");
+
+// Handle Dragging using Tauri Native start_drag command
+const handleMouseDown = (e: React.MouseEvent) => {
+  const target = e.target as HTMLElement;
+  // Don't drag if clicking interactive elements like buttons, badges, or input items
+  if (
+    target.closest("button") ||
+    target.closest("a") ||
+    target.closest("input") ||
+    target.closest(".cursor-pointer")
+  ) {
+    return;
+  }
+
+  const startX = e.clientX;
+  const startY = e.clientY;
+  let dragStarted = false;
+
+  const handleMouseMove = (event: MouseEvent) => {
+    const deltaX = Math.abs(event.clientX - startX);
+    const deltaY = Math.abs(event.clientY - startY);
+    const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+    if (!dragStarted && distance > 5) {
+      dragStarted = true;
+      setIsDragging(true);
+      safeInvoke("start_drag");
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+    document.removeEventListener("mousemove", handleMouseMove);
+    document.removeEventListener("mouseup", handleMouseUp);
+  };
+
+  document.addEventListener("mousemove", handleMouseMove);
+  document.addEventListener("mouseup", handleMouseUp);
+};
 
 useEffect(() => {
   if (isExpanded || isFocused) {
@@ -127,6 +180,47 @@ useEffect(() => {
     release();
   }
 }, [isExpanded, isFocused]);
+
+// ResizeObserver with layout smoothing to prevent animation clipping and system stutter
+useEffect(() => {
+  if (!containerRef.current || typeof ResizeObserver === "undefined") return;
+
+  const resizeObserver = new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const element = containerRef.current;
+      if (!element) continue;
+
+      const width = element.offsetWidth;
+      const height = element.offsetHeight;
+
+      if (width === 0 || height === 0) continue;
+
+      if (shrinkTimeoutRef.current) {
+        clearTimeout(shrinkTimeoutRef.current);
+        shrinkTimeoutRef.current = null;
+      }
+
+      // If the actual measured content has grown beyond our currently allocated window boundary,
+      // instantly resize the physical window to accommodate it to prevent any visual clipping!
+      if (width > currentWindowSize.current.width || height > currentWindowSize.current.height) {
+        currentWindowSize.current = { width, height };
+        safeInvoke("update_window_size", { width, height });
+      } else {
+        // Otherwise, wait 350ms for Framer Motion transitions to fully settle before cropping the bounds down
+        shrinkTimeoutRef.current = setTimeout(() => {
+          currentWindowSize.current = { width, height };
+          safeInvoke("update_window_size", { width, height });
+        }, 350);
+      }
+    }
+  });
+
+  resizeObserver.observe(containerRef.current);
+  return () => {
+    resizeObserver.disconnect();
+    if (shrinkTimeoutRef.current) clearTimeout(shrinkTimeoutRef.current);
+  };
+}, [isExpanded, isHovered, isFocused]);
 
 useEffect(() => {
 return () => {
@@ -157,6 +251,66 @@ const pillState: PillBorderState = !connected
 
 const isWaiting = pillState === "waiting_permission" || pillState === "waiting_question";
 
+// Instantly pre-allocate physical window space on state transitions to prevent animation clipping
+useEffect(() => {
+  const expandWindow = async () => {
+    let targetWidth = 340;
+    let targetHeight = 54;
+
+    if (isExpanded) {
+      targetWidth = 720;
+      targetHeight = 700; // very generous canvas for the Cockpit dashboard
+    } else if (isHovered || isFocused) {
+      targetWidth = 340;
+      targetHeight = active ? 420 : 300; // very generous canvas for the hover panel
+    } else {
+      // Shrinking: handled by the debounced settle crop in ResizeObserver
+      return;
+    }
+
+    const width = targetWidth + 24;
+    const height = targetHeight + 24;
+    currentWindowSize.current = { width, height };
+    await safeInvoke("update_window_size", { width, height });
+  };
+
+  expandWindow();
+}, [isExpanded, isHovered, isFocused, !!active]);
+
+// Dynamic border color based on active agent theme color or connection state
+const getBorderColor = () => {
+  if (!connected) return "rgba(239, 68, 68, 0.4)"; // Red for offline
+  if (active) {
+    if (active.phase === "waiting_permission" || active.phase === "waiting_question") {
+      return "rgba(245, 158, 11, 0.4)"; // Amber for warnings
+    }
+    if (active.phase === "failed") {
+      return "rgba(239, 68, 68, 0.4)"; // Red for failed
+    }
+    const agentColor = getAgentColor(active.agent);
+    return `${agentColor}66`; // Padded with 40% opacity for a premium neon border
+  }
+  return "rgba(255, 255, 255, 0.08)"; // Subtle border for idle
+};
+
+// Dynamic box shadow and neon glow based on connection and active agent state
+const getBoxShadow = () => {
+  if (!connected) {
+    return "0 12px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(239, 68, 68, 0.15)";
+  }
+  if (active) {
+    if (active.phase === "waiting_permission" || active.phase === "waiting_question") {
+      return "0 12px 40px rgba(0, 0, 0, 0.5), 0 0 24px rgba(245, 158, 11, 0.25)";
+    }
+    if (active.phase === "failed") {
+      return "0 12px 40px rgba(0, 0, 0, 0.5), 0 0 24px rgba(239, 68, 68, 0.2)";
+    }
+    const agentColor = getAgentColor(active.agent);
+    return `0 12px 40px rgba(0, 0, 0, 0.5), 0 0 20px ${agentColor}22`; // Subtle agent color glow!
+  }
+  return "0 12px 40px rgba(0, 0, 0, 0.4)"; // Sleek default shadow
+};
+
 const phaseLabel = !connected
 ? "Offline"
 : !active
@@ -170,19 +324,17 @@ const phaseLabel = !connected
 const targetWidth = isExpanded ? 720 : 340;
 
 return (
-<div className="fixed top-5 left-1/2 -translate-x-1/2 z-[100] pointer-events-none">
+<div ref={containerRef} className="p-3 w-fit pointer-events-none">
 <motion.div
 layout
 tabIndex={0}
-className="flex flex-col overflow-hidden pointer-events-auto border
-backdrop-blur-xl bg-[#0C0C0E]/80 rounded-3xl focus:outline-none"
+onMouseDown={handleMouseDown}
+className={`flex flex-col overflow-hidden pointer-events-auto border backdrop-blur-xl bg-[#0C0C0E]/80 rounded-3xl focus:outline-none transition-shadow ${
+  isDragging ? "cursor-grabbing shadow-2xl scale-[1.01]" : "cursor-grab shadow-xl hover:scale-[1.005]"
+}`}
 style={{
-borderColor: isWaiting
-? "rgba(245,158,11,0.2)"
-: BORDER_COLORS[pillState],
-boxShadow: isWaiting
-? "0 0 24px rgba(245,158,11,0.15)"
-: "0 12px 40px rgba(0,0,0,0.4)",
+borderColor: getBorderColor(),
+boxShadow: getBoxShadow(),
 }}
 animate={{ width: targetWidth }}
 transition={{ type: "spring", stiffness: 300, damping: 30 }}
@@ -360,14 +512,9 @@ className="flex-1 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 active:scale
 Open Cockpit
 </button>
 <button
-onClick={async () => {
+onClick={() => {
 if (!active) return;
-try {
-const { invoke } = await import("@tauri-apps/api/core");
-await invoke("stop_agent", { sessionId: active.id });
-} catch (e) {
-console.error("stop failed:", e);
-}
+safeInvoke("stop_agent", { sessionId: active.id });
 }}
 className="flex-1 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-[11px] font-semibold text-white/30 hover:text-red-400 transition-all border border-white/[0.06]"
 >
