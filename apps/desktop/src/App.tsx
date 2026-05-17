@@ -37,7 +37,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col items-center pt-4 bg-transparent select-none pointer-events-none w-full h-screen">
+    <div className="flex flex-col items-center pt-4 bg-transparent select-none pointer-events-none w-fit h-screen">
       <AnimatePresence mode="wait">
         {view === "main" ? (
           <motion.div
