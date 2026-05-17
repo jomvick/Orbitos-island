@@ -13,6 +13,7 @@ interface SessionStore {
   syncSessions: (sessions: AgentSession[]) => void;
   removeSession: (id: string) => void;
   setPendingOverlay: (session: AgentSession | null) => void;
+  orphanRunningSessions: () => void;
 }
 
 export const useSessionStore = create<SessionStore>((set) => ({
