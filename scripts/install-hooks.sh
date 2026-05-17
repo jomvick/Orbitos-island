@@ -112,8 +112,9 @@ install_tmux_hook() {
 }
 
 verify_daemon_running() {
-    if [ -S /tmp/agentosd.sock ]; then
-        info "daemon socket found at /tmp/agentosd.sock"
+    local socket="$HOME/.agentos/run/agentosd.sock"
+    if [ -S "$socket" ]; then
+        info "daemon socket found at $socket"
         return 0
     fi
 

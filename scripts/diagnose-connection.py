@@ -4,7 +4,7 @@ import os
 import sys
 import stat
 
-SOCKET_PATH = os.path.expanduser("~/.agentosd.sock")
+SOCKET_PATH = os.path.expanduser("~/.agentos/run/agentosd.sock")
 
 def check_socket():
     print(f"--- Checking socket: {SOCKET_PATH} ---")

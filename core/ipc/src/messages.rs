@@ -32,7 +32,7 @@ pub enum IpcMessage {
         channel: String,
         event: Box<UniversalEvent>,
         #[serde(skip_serializing_if = "Option::is_none")]
-        session: Option<AgentSession>,
+        session: Option<Box<AgentSession>>,
         timestamp: DateTime<Utc>,
     },
 }

@@ -114,7 +114,7 @@ pub async fn handle_client(mut codec: BridgeCodec, state: Arc<DaemonState>) {
                         let msg = IpcMessage::SubscriptionEvent {
                             channel: "sessions".to_string(),
                             event: Box::new((*event).clone()),
-                            session,
+                            session: session.map(Box::new),
                             timestamp: chrono::Utc::now(),
                         };
                         if let Err(e) = codec.send(&msg).await {

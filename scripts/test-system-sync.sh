@@ -20,7 +20,7 @@ else
 fi
 
 # 2. Check Socket File
-SOCKET="$HOME/.agentosd.sock"
+SOCKET="$HOME/.agentos/run/agentosd.sock"
 echo -n "2. Checking IPC socket ($SOCKET)... "
 if [ -S "$SOCKET" ]; then
     echo -e "${GREEN}OK (Exists and is a socket)${NC}"
@@ -31,7 +31,7 @@ fi
 
 # 3. Test IPC Communication (Ping)
 echo -n "3. Testing IPC Ping-Pong... "
-PYTHON_CMD="import socket, json, os; s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.connect(os.path.expanduser('~/.agentosd.sock')); s.sendall(json.dumps({'type':'command','id':'00000000-0000-0000-0000-000000000000','command':{'action':'ping'},'timestamp':''}).encode()+b'\\n'); print(s.recv(1024).decode())"
+PYTHON_CMD="import socket, json, os; s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.connect(os.path.expanduser('~/.agentos/run/agentosd.sock')); s.sendall(json.dumps({'type':'command','id':'00000000-0000-0000-0000-000000000000','command':{'action':'ping'},'timestamp':'2026-05-17T11:40:00Z'}).encode()+b'\\n'); print(s.recv(1024).decode())"
 RESPONSE=$(python3 -c "$PYTHON_CMD" 2>/dev/null)
 if [[ $RESPONSE == *"pong"* ]]; then
     echo -e "${GREEN}OK (Received Pong)${NC}"
@@ -41,7 +41,7 @@ fi
 
 # 4. Test Hook Injection
 echo -n "4. Testing Hook -> Daemon relay... "
-./agentos/target/debug/agentos-hook -s test-diag -e '{"id":"diag-session","agent":"claude","event":"session_started","session_id":"diag-test","cwd":"'$(pwd)'","timestamp":"2026-05-15T21:00:00Z"}'
+./target/debug/agentos-hook -s claude -e '{"type":"session_start","session_id":"diag-test","cwd":"'$(pwd)'"}'
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}OK (Event sent)${NC}"
 else
@@ -50,8 +50,8 @@ fi
 
 # 5. Check Daemon Logs for Tauri connection
 echo -n "5. Checking for active Tauri connections... "
-CONN_COUNT=$(grep "client subscribed" agentos/agentosd.log | wc -l)
-DISC_COUNT=$(grep "client disconnected" agentos/agentosd.log | wc -l)
+CONN_COUNT=$(grep "client subscribed" agentosd.log | wc -l)
+DISC_COUNT=$(grep "client disconnected" agentosd.log | wc -l)
 ACTIVE=$((CONN_COUNT - DISC_COUNT))
 if [ $ACTIVE -gt 0 ]; then
     echo -e "${GREEN}OK ($ACTIVE client(s) connected)${NC}"

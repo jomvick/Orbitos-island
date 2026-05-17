@@ -14,7 +14,7 @@ set -euo pipefail
 AGENT_NAME="AGENT_PLACEHOLDER"
 AGENT_REAL_BIN="REAL_BIN_PLACEHOLDER"
 SESSION_ID="$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen 2>/dev/null || date +%s%N)"
-DAEMON_SOCKET="${AGENTOSD_SOCK:-${HOME}/.agentosd.sock}"
+DAEMON_SOCKET="${AGENTOSD_SOCK:-${HOME}/.agentos/run/agentosd.sock}"
 HOOK_BIN="$(command -v agentos-hook 2>/dev/null || echo '')"
 
 # ── Helper: fire-and-forget event ────────────────────────────────────────────
