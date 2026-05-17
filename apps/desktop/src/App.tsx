@@ -45,7 +45,7 @@ export default function App() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="flex flex-col items-center pointer-events-none"
+            className="flex flex-col items-center pointer-events-none w-fit"
           >
             <FloatingBar />
             <Overlay />
