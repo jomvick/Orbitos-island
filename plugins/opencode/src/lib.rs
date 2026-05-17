@@ -1,41 +1,9 @@
-use chrono::Utc;
-use daemon_core::agents::{AgentPlugin, PluginError, PluginResult};
-use daemon_core::state::{AgentKind, EventKind, PermissionRequest, UniversalEvent};
-use serde::Deserialize;
-use uuid::Uuid;
-
-#[derive(Deserialize)]
-#[serde(untagged)]
-#[allow(clippy::large_enum_variant)]
-enum OpenCodeEvent {
-    Typed {
-        #[serde(rename = "type")]
-        event_type: String,
-        session_id: Option<String>,
-        cwd: Option<String>,
-        branch: Option<String>,
-        model: Option<String>,
-        tokens_input: Option<u64>,
-        tokens_output: Option<u64>,
-        duration_ms: Option<u64>,
-        error: Option<String>,
-        permission: Option<PermissionPayload>,
-        terminal: Option<String>,
-        pane: Option<String>,
-        metadata: Option<serde_json::Value>,
-    },
-    Raw(serde_json::Value),
-}
-
-#[derive(Deserialize)]
-struct PermissionPayload {
-    command: Option<String>,
-    description: Option<String>,
-}
+use daemon_core::agents::{AgentPlugin, SimplePlugin, PluginResult};
+use daemon_core::state::{AgentKind, EventKind};
 
 pub struct OpenCodePlugin;
 
-impl AgentPlugin for OpenCodePlugin {
+impl SimplePlugin for OpenCodePlugin {
     fn name(&self) -> &'static str {
         "opencode"
     }
@@ -44,76 +12,32 @@ impl AgentPlugin for OpenCodePlugin {
         AgentKind::Opencode
     }
 
-    fn parse(&self, payload: &str) -> PluginResult {
-        let event: OpenCodeEvent =
-            serde_json::from_str(payload).map_err(|e| PluginError::ParseError(e.to_string()))?;
-
-        match event {
-            OpenCodeEvent::Typed {
-                event_type,
-                session_id,
-                cwd,
-                branch,
-                model,
-                tokens_input,
-                tokens_output,
-                duration_ms,
-                error,
-                permission,
-                terminal,
-                pane,
-                metadata,
-            } => {
-                let event_kind = match event_type.as_str() {
-                    "session_start" => EventKind::SessionStarted,
-                    "session_complete" => EventKind::SessionCompleted,
-                    "session_failed" => EventKind::SessionFailed,
-                    "activity" => EventKind::ActivityUpdated,
-                    "permission" => EventKind::PermissionRequested,
-                    "question" => EventKind::QuestionAsked,
-                    "heartbeat" => EventKind::Heartbeat,
-                    "token_usage" => EventKind::TokenUsage,
-                    _ => return Err(PluginError::UnsupportedEvent(event_type)),
-                };
-
-                let permission_req = permission.map(|p| PermissionRequest {
-                    id: Uuid::new_v4(),
-                    command: p.command.unwrap_or_default(),
-                    description: p.description.unwrap_or_default(),
-                    context: None,
-                    created_at: Utc::now(),
-                    expires_at: Utc::now() + chrono::Duration::minutes(5),
-                });
-
-                Ok(Some(UniversalEvent {
-                    id: Uuid::new_v4(),
-                    agent: AgentKind::Opencode,
-                    event: event_kind,
-                    session_id: session_id.unwrap_or_else(|| Uuid::new_v4().to_string()),
-                    cwd,
-                    branch,
-                    model,
-                    tokens_input,
-                    tokens_output,
-                    duration_ms,
-                    terminal,
-                    pane,
-                    permission: permission_req,
-                    question: None,
-                    jump_target: None,
-                    plan: None,
-                    diff: None,
-                    error,
-                    metadata,
-                    timestamp: Utc::now(),
-                }))
-            }
-            OpenCodeEvent::Raw(val) => {
-                let event: UniversalEvent = serde_json::from_value(val)
-                    .map_err(|e| PluginError::ParseError(e.to_string()))?;
-                Ok(Some(event))
-            }
+    fn map_event_type(&self, raw_type: &str) -> Option<EventKind> {
+        match raw_type {
+            "session_start" => Some(EventKind::SessionStarted),
+            "session_complete" => Some(EventKind::SessionCompleted),
+            "session_failed" => Some(EventKind::SessionFailed),
+            "activity" => Some(EventKind::ActivityUpdated),
+            "permission" => Some(EventKind::PermissionRequested),
+            "question" => Some(EventKind::QuestionAsked),
+            "heartbeat" => Some(EventKind::Heartbeat),
+            "token_usage" => Some(EventKind::TokenUsage),
+            _ => None,
         }
+    }
+}
+
+impl AgentPlugin for OpenCodePlugin {
+    fn name(&self) -> &'static str {
+        SimplePlugin::name(self)
+    }
+
+    fn agent_kind(&self) -> AgentKind {
+        SimplePlugin::agent_kind(self)
+    }
+
+    fn parse(&self, payload: &str) -> PluginResult {
+        self.parse_base(payload)
     }
 }
 
@@ -145,5 +69,29 @@ mod tests {
         let plugin = OpenCodePlugin;
         let result = plugin.parse("not json");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_unknown_fields() {
+        let plugin = OpenCodePlugin;
+        let payload = r#"{"type":"session_start","unknown_future_field":"x","session_id":"abc"}"#;
+        let result = plugin.parse(payload).unwrap().unwrap();
+        assert_eq!(result.event, EventKind::SessionStarted);
+    }
+
+    #[test]
+    fn test_parse_missing_optional_fields() {
+        let plugin = OpenCodePlugin;
+        let payload = r#"{"type":"token_usage","session_id":"abc"}"#;
+        let event = plugin.parse(payload).unwrap().unwrap();
+        assert!(event.tokens_input.is_none());
+    }
+
+    #[test]
+    fn test_parse_unknown_event_type_returns_none() {
+        let plugin = OpenCodePlugin;
+        let payload = r#"{"type":"future_event_type","session_id":"abc"}"#;
+        let result = plugin.parse(payload);
+        assert!(matches!(result, Ok(None)));
     }
 }

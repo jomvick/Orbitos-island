@@ -3,6 +3,8 @@ mod discover;
 mod notifier;
 mod plugin_loader;
 mod server;
+mod handlers;
+mod watcher;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -21,7 +23,7 @@ use crate::server::{handle_client, DaemonState};
 
 #[tokio::main]
 async fn main() {
-    let mut args = CliArgs::parse();
+    let args = CliArgs::parse();
 
     if args.discover {
         let result = discover::discover_agents();
@@ -29,11 +31,7 @@ async fn main() {
         return;
     }
 
-    // Resolve socket path
-    if !args.socket_path.is_absolute() {
-        let home = std::env::var("HOME").expect("HOME env var not set");
-        args.socket_path = std::path::Path::new(&home).join(&args.socket_path);
-    }
+
 
     let filter = if args.verbose {
         EnvFilter::new("agentosd=debug,daemon_core=debug,agentos_ipc=debug,agentos_storage=debug")
@@ -61,6 +59,13 @@ async fn main() {
 
     let plugin_registry = plugin_loader::load_default_plugins();
 
+    // Install transparent shell wrappers for all detected agents.
+    let wrapper_results = discover::install_shell_wrappers();
+    let installed: Vec<_> = wrapper_results.iter().filter(|r| r.installed).collect();
+    if !installed.is_empty() {
+        info!(count = %installed.len(), "shell wrappers installed/updated");
+    }
+
     let db_for_events: Arc<Mutex<Database>> = Arc::new(Mutex::new(db));
 
     let state = Arc::new(DaemonState::new(
@@ -85,14 +90,43 @@ async fn main() {
         notifier::start_notification_loop(notif_event_bus, "agentosd").await;
     });
 
+    // Spawn the process watcher — detects agent crashes and synthesizes
+    // session_completed events for sessions whose PIDs have vanished.
+    {
+        let watcher_state = state.clone();
+        tokio::spawn(async move {
+            watcher::start_process_watcher(watcher_state).await;
+        });
+    }
+
+    // Export agent traces/metrics via OpenTelemetry (if --otlp-endpoint is set)
+    if let Some(ref otlp_endpoint) = args.otlp_endpoint {
+        let rx = state.event_bus.subscribe();
+        let endpoint = otlp_endpoint.clone();
+        tokio::spawn(async move {
+            agentos_exporter::OtlpExporter::new(endpoint).start(rx).await;
+        });
+        info!(endpoint = %otlp_endpoint, "OTLP exporter initialized");
+    }
+
+    let mut socket_path = args
+        .socket_path
+        .clone()
+        .unwrap_or_else(agentos_ipc::get_default_socket_path);
+
+    if !socket_path.is_absolute() {
+        let home = std::env::var("HOME").expect("HOME env var not set");
+        socket_path = std::path::Path::new(&home).join(&socket_path);
+    }
+
     let socket_config = SocketConfig {
-        path: args.socket_path.clone(),
+        path: socket_path.clone(),
         max_connections: args.max_connections,
     };
 
     let server = match IpcServer::bind(socket_config) {
         Ok(s) => {
-            info!(path = %args.socket_path.display(), "IPC server listening");
+            info!(path = %socket_path.display(), "IPC server listening");
             s
         }
         Err(e) => {

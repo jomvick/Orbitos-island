@@ -14,6 +14,8 @@ pub struct StoredSession {
     pub pane: Option<String>,
     pub metadata: Option<String>,
     pub error: Option<String>,
+    /// OS process ID — may be None for sessions started before v2 migration.
+    pub pid: Option<u32>,
     pub created_at: i64,
     pub updated_at: i64,
     pub last_heartbeat: i64,
@@ -44,6 +46,7 @@ impl StoredSession {
                 .metadata
                 .as_ref()
                 .and_then(|m| serde_json::from_str(m).ok()),
+            pid: self.pid,
             created_at: chrono::DateTime::from_timestamp(self.created_at, 0).unwrap_or_default(),
             updated_at: chrono::DateTime::from_timestamp(self.updated_at, 0).unwrap_or_default(),
             last_heartbeat: chrono::DateTime::from_timestamp(self.last_heartbeat, 0)

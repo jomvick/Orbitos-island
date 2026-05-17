@@ -50,7 +50,6 @@ pub enum EventBusError {
 mod tests {
     use super::*;
     use crate::state::{AgentKind, EventKind, UniversalEvent};
-    use chrono::Utc;
     use uuid::Uuid;
 
     fn sample_event() -> Arc<UniversalEvent> {
@@ -74,7 +73,8 @@ mod tests {
             diff: None,
             error: None,
             metadata: None,
-            timestamp: Utc::now(),
+            pid: None,
+            timestamp: chrono::Utc::now(),
         })
     }
 
@@ -119,6 +119,48 @@ mod tests {
         assert_eq!(bus.subscriber_count(), 1);
         let _rx2 = bus.subscribe();
         assert_eq!(bus.subscriber_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_slow_subscriber_does_not_block_publisher() {
+        let bus = EventBus::new();
+        let mut rx = bus.subscribe();
+
+        for i in 0..CHANNEL_CAPACITY + 5 {
+            let mut e = sample_event();
+            let e = Arc::make_mut(&mut e);
+            e.session_id = format!("event-{}", i);
+            let _ = bus.publish(Arc::new(e.clone()));
+        }
+
+        match rx.try_recv() {
+            Err(tokio::sync::broadcast::error::TryRecvError::Lagged(n)) => {
+                assert!(n > 0, "expected lag, got {}", n);
+            }
+            Ok(_) => {}
+            Err(e) => panic!("unexpected error: {:?}", e),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_event_reaches_all_subscribers() {
+        let bus = EventBus::new();
+        let mut rx1 = bus.subscribe();
+        let mut rx2 = bus.subscribe();
+
+        let event = sample_event();
+        bus.publish(event).unwrap();
+
+        let e1 = tokio::time::timeout(std::time::Duration::from_secs(1), rx1.recv())
+            .await
+            .expect("timeout")
+            .expect("recv error");
+        let e2 = tokio::time::timeout(std::time::Duration::from_secs(1), rx2.recv())
+            .await
+            .expect("timeout")
+            .expect("recv error");
+
+        assert_eq!(e1.session_id, e2.session_id);
     }
 }
 

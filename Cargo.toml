@@ -5,6 +5,7 @@ members = [
     "core/ipc",
     "core/storage",
     "core/daemon",
+    "core/exporter",
     "hooks",
     "plugins/opencode",
     "plugins/claude",

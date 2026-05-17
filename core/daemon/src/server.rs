@@ -4,11 +4,11 @@ use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
-use agentos_ipc::{BridgeCodec, IpcCommand, IpcMessage, SessionFilter, MAX_MESSAGE_SIZE};
+use agentos_ipc::{BridgeCodec, IpcCommand, IpcMessage, MAX_MESSAGE_SIZE};
 use agentos_storage::Database;
 use daemon_core::agents::AgentRegistry;
 use daemon_core::events::EventBus;
-use daemon_core::state::{apply_event, AgentSession, SessionState, UniversalEvent};
+use daemon_core::state::{apply_event, SessionState, UniversalEvent};
 
 pub struct DaemonState {
     pub event_bus: EventBus,
@@ -107,9 +107,14 @@ pub async fn handle_client(mut codec: BridgeCodec, state: Arc<DaemonState>) {
             event = event_subscriber.recv() => {
                 match event {
                     Ok(event) => {
+                        let session = {
+                            let session_state = state.session_state.read().await;
+                            session_state.sessions.get(&event.session_id).cloned()
+                        };
                         let msg = IpcMessage::SubscriptionEvent {
                             channel: "sessions".to_string(),
                             event: Box::new((*event).clone()),
+                            session,
                             timestamp: chrono::Utc::now(),
                         };
                         if let Err(e) = codec.send(&msg).await {
@@ -143,434 +148,213 @@ async fn handle_command(
     info!(command = ?command, id = %id, "received command");
     match command {
         IpcCommand::GetSessions { filter } => {
-            let session_state = state.session_state.read().await;
-            let sessions: Vec<AgentSession> = match filter {
-                Some(SessionFilter::Active) => session_state
-                    .sessions
-                    .values()
-                    .filter(|s| s.is_active())
-                    .cloned()
-                    .collect(),
-                Some(SessionFilter::ByAgent(agent)) => session_state
-                    .sessions
-                    .values()
-                    .filter(|s| s.agent == agent)
-                    .cloned()
-                    .collect(),
-                _ => session_state.sessions.values().cloned().collect(),
-            };
-            let data = serde_json::to_value(&sessions).unwrap_or_default();
-            let _ = codec.send(&IpcMessage::new_response(id, Some(data))).await;
+            crate::handlers::handle_get_sessions(codec, id, filter, state).await;
         }
-
         IpcCommand::GetSession { session_id } => {
-            let session_state = state.session_state.read().await;
-            let data = session_state
-                .sessions
-                .get(&session_id)
-                .map(|s| serde_json::to_value(s).unwrap_or_default());
-            let _ = codec.send(&IpcMessage::new_response(id, data)).await;
+            crate::handlers::handle_get_session(codec, id, session_id, state).await;
         }
-
         IpcCommand::Ping => {
-            let _ = codec
-                .send(&IpcMessage::new_response(
-                    id,
-                    Some(serde_json::json!({"pong": true})),
-                ))
-                .await;
+            crate::handlers::handle_ping(codec, id).await;
         }
-
         IpcCommand::DiscoverAgents => {
-            let result = crate::discover::discover_agents();
-            let data = serde_json::to_value(&result).unwrap_or_default();
-            let _ = codec.send(&IpcMessage::new_response(id, Some(data))).await;
+            crate::handlers::handle_discover_agents(codec, id).await;
         }
-
         IpcCommand::Shutdown => {
-            info!("shutdown requested via IPC");
-            let _ = codec.send(&IpcMessage::new_response(id, None)).await;
-            std::process::exit(0);
+            crate::handlers::handle_shutdown(codec, id).await;
         }
-
-        IpcCommand::GetSessionStats => match state.db.as_ref() {
-            Some(db) => {
-                let data = db
-                    .lock()
-                    .await
-                    .get_session_stats()
-                    .ok()
-                    .and_then(|s| serde_json::to_value(&s).ok());
-                match data {
-                    Some(v) => {
-                        let _ = codec.send(&IpcMessage::new_response(id, Some(v))).await;
-                    }
-                    None => {
-                        let _ = codec
-                            .send(&IpcMessage::new_error(id, "query failed".to_string()))
-                            .await;
-                    }
-                }
-            }
-            None => {
-                let _ = codec
-                    .send(&IpcMessage::new_error(id, "no database".to_string()))
-                    .await;
-            }
-        },
-
-        IpcCommand::GetAgentAnalytics => match state.db.as_ref() {
-            Some(db) => {
-                let data = db
-                    .lock()
-                    .await
-                    .get_agent_analytics()
-                    .ok()
-                    .and_then(|a| serde_json::to_value(&a).ok());
-                match data {
-                    Some(v) => {
-                        let _ = codec.send(&IpcMessage::new_response(id, Some(v))).await;
-                    }
-                    None => {
-                        let _ = codec
-                            .send(&IpcMessage::new_error(id, "query failed".to_string()))
-                            .await;
-                    }
-                }
-            }
-            None => {
-                let _ = codec
-                    .send(&IpcMessage::new_error(id, "no database".to_string()))
-                    .await;
-            }
-        },
-
-        IpcCommand::GetTimeline { limit } => match state.db.as_ref() {
-            Some(db) => {
-                let data = db
-                    .lock()
-                    .await
-                    .get_timeline(limit)
-                    .ok()
-                    .and_then(|e| serde_json::to_value(&e).ok());
-                match data {
-                    Some(v) => {
-                        let _ = codec.send(&IpcMessage::new_response(id, Some(v))).await;
-                    }
-                    None => {
-                        let _ = codec
-                            .send(&IpcMessage::new_error(id, "query failed".to_string()))
-                            .await;
-                    }
-                }
-            }
-            None => {
-                let _ = codec
-                    .send(&IpcMessage::new_error(id, "no database".to_string()))
-                    .await;
-            }
-        },
-
+        IpcCommand::GetSessionStats => {
+            crate::handlers::handle_get_session_stats(codec, id, state).await;
+        }
+        IpcCommand::GetAgentAnalytics => {
+            crate::handlers::handle_get_agent_analytics(codec, id, state).await;
+        }
+        IpcCommand::GetTimeline { limit } => {
+            crate::handlers::handle_get_timeline(codec, id, limit, state).await;
+        }
         IpcCommand::SearchSessions { query } => {
-            let result = match state.db.as_ref() {
-                Some(db) => db
-                    .lock()
-                    .await
-                    .search_sessions(&query)
-                    .ok()
-                    .and_then(|sessions| {
-                        let domain: Vec<AgentSession> = sessions
-                            .into_iter()
-                            .filter_map(|s| s.to_domain().ok())
-                            .collect();
-                        serde_json::to_value(&domain).ok()
-                    }),
-                None => None,
-            };
-            match result {
-                Some(data) => {
-                    let _ = codec.send(&IpcMessage::new_response(id, Some(data))).await;
-                }
-                None => {
-                    let _ = codec
-                        .send(&IpcMessage::new_error(id, "no database".to_string()))
-                        .await;
-                }
-            }
+            crate::handlers::handle_search_sessions(codec, id, query, state).await;
         }
-
         IpcCommand::JumpToSession { session_id } => {
-            let session_state = state.session_state.read().await;
-            let session = session_state.sessions.get(&session_id);
-
-            match session {
-                Some(s) => {
-                    let terminal = s.terminal.as_deref();
-                    let pid = s.jump_target.as_ref().and_then(|j| j.pid);
-                    let cwd = s.jump_target.as_ref().and_then(|j| j.cwd.as_deref());
-
-                    match daemon_core::terminals::detector::resolve_jump_target(terminal, pid, cwd)
-                    {
-                        Ok(Some(pane_id)) => {
-                            match daemon_core::terminals::detector::focus_terminal(
-                                &pane_id, terminal,
-                            ) {
-                                Ok(_) => {
-                                    let _ = codec
-                                        .send(&IpcMessage::new_response(
-                                            id,
-                                            Some(serde_json::json!({"pane_id": pane_id, "status": "focused"})),
-                                        ))
-                                        .await;
-                                }
-                                Err(e) => {
-                                    let _ = codec
-                                        .send(&IpcMessage::new_error(
-                                            id,
-                                            format!("focus failed: {}", e),
-                                        ))
-                                        .await;
-                                }
-                            }
-                        }
-                        Ok(None) => {
-                            let _ = codec
-                                .send(&IpcMessage::new_error(
-                                    id,
-                                    "terminal pane not found".to_string(),
-                                ))
-                                .await;
-                        }
-                        Err(e) => {
-                            let _ = codec
-                                .send(&IpcMessage::new_error(id, format!("terminal error: {}", e)))
-                                .await;
-                        }
-                    }
-                }
-                None => {
-                    let _ = codec
-                        .send(&IpcMessage::new_error(
-                            id,
-                            format!("session not found: {}", session_id),
-                        ))
-                        .await;
-                }
-            }
+            crate::handlers::handle_jump_to_session(codec, id, session_id, state).await;
         }
-
         IpcCommand::ResolvePermission {
             permission_id,
             approved,
             ..
         } => {
-            let session_id = {
-                let session_state = state.session_state.read().await;
-                session_state
-                    .sessions
-                    .iter()
-                    .find(|(_, s)| {
-                        s.permission
-                            .as_ref()
-                            .is_some_and(|p| p.id == permission_id)
-                    })
-                    .map(|(id, _)| id.clone())
-            };
-
-            match session_id {
-                Some(sid) => {
-                    let event = daemon_core::state::UniversalEvent {
-                        id: Uuid::new_v4(),
-                        agent: daemon_core::state::AgentKind::Custom("agentos".into()),
-                        event: daemon_core::state::EventKind::ActionableStateResolved,
-                        session_id: sid.clone(),
-                        cwd: None,
-                        branch: None,
-                        model: None,
-                        tokens_input: None,
-                        tokens_output: None,
-                        duration_ms: None,
-                        terminal: None,
-                        pane: None,
-                        permission: None,
-                        question: None,
-                        jump_target: None,
-                        plan: None,
-                        diff: None,
-                        error: None,
-                        metadata: Some(serde_json::json!({
-                            "resolved_by": "user",
-                            "approved": approved
-                        })),
-                        timestamp: chrono::Utc::now(),
-                    };
-
-                    let arc_event = Arc::new(event);
-                    state
-                        .event_bus
-                        .publish(Arc::clone(&arc_event))
-                        .unwrap_or_else(|e| {
-                            error!("event bus full: {:?}", e);
-                            0
-                        });
-
-                    let mut session_state = state.session_state.write().await;
-                    *session_state =
-                        daemon_core::state::apply_event(session_state.clone(), (*arc_event).clone());
-
-                    let _ = codec
-                        .send(&IpcMessage::new_response(
-                            id,
-                            Some(serde_json::json!({"status": "resolved", "session_id": sid})),
-                        ))
-                        .await;
-                }
-                None => {
-                    let _ = codec
-                        .send(&IpcMessage::new_error(
-                            id,
-                            "permission not found".to_string(),
-                        ))
-                        .await;
-                }
-            }
+            crate::handlers::handle_resolve_permission(codec, id, permission_id, approved, state).await;
         }
-
         IpcCommand::AnswerQuestion {
             question_id,
             answer,
         } => {
-            let session_id = {
-                let session_state = state.session_state.read().await;
-                session_state
-                    .sessions
-                    .iter()
-                    .find(|(_, s)| {
-                        s.question
-                            .as_ref()
-                            .is_some_and(|q| q.id == question_id)
-                    })
-                    .map(|(id, _)| id.clone())
-            };
-
-            match session_id {
-                Some(sid) => {
-                    let event = daemon_core::state::UniversalEvent {
-                        id: Uuid::new_v4(),
-                        agent: daemon_core::state::AgentKind::Custom("agentos".into()),
-                        event: daemon_core::state::EventKind::ActionableStateResolved,
-                        session_id: sid.clone(),
-                        cwd: None,
-                        branch: None,
-                        model: None,
-                        tokens_input: None,
-                        tokens_output: None,
-                        duration_ms: None,
-                        terminal: None,
-                        pane: None,
-                        permission: None,
-                        question: None,
-                        jump_target: None,
-                        plan: None,
-                        diff: None,
-                        error: None,
-                        metadata: Some(serde_json::json!({
-                            "resolved_by": "user",
-                            "answer": answer
-                        })),
-                        timestamp: chrono::Utc::now(),
-                    };
-
-                    let arc_event = Arc::new(event);
-                    state
-                        .event_bus
-                        .publish(Arc::clone(&arc_event))
-                        .unwrap_or_else(|e| {
-                            error!("event bus full: {:?}", e);
-                            0
-                        });
-
-                    let mut session_state = state.session_state.write().await;
-                    *session_state =
-                        daemon_core::state::apply_event(session_state.clone(), (*arc_event).clone());
-
-                    let _ = codec
-                        .send(&IpcMessage::new_response(
-                            id,
-                            Some(serde_json::json!({"status": "resolved", "session_id": sid})),
-                        ))
-                        .await;
-                }
-                None => {
-                    let _ = codec
-                        .send(&IpcMessage::new_error(
-                            id,
-                            "permission not found".to_string(),
-                        ))
-                        .await;
-                }
-            }
+            crate::handlers::handle_answer_question(codec, id, question_id, answer, state).await;
         }
-
         IpcCommand::StopAgent { session_id } => {
-            let exists = {
-                let session_state = state.session_state.read().await;
-                session_state.sessions.contains_key(&session_id)
-            };
-
-            if exists {
-                let event = daemon_core::state::UniversalEvent {
-                    id: Uuid::new_v4(),
-                    agent: daemon_core::state::AgentKind::Custom("agentos".into()),
-                    event: daemon_core::state::EventKind::SessionFailed,
-                    session_id: session_id.clone(),
-                    cwd: None,
-                    branch: None,
-                    model: None,
-                    tokens_input: None,
-                    tokens_output: None,
-                    duration_ms: None,
-                    terminal: None,
-                    pane: None,
-                    permission: None,
-                    question: None,
-                    jump_target: None,
-                    plan: None,
-                    diff: None,
-                    error: Some("stopped by user".to_string()),
-                    metadata: Some(serde_json::json!({
-                        "stopped_by": "user"
-                    })),
-                    timestamp: chrono::Utc::now(),
-                };
-
-                let arc_event = Arc::new(event);
-                state
-                    .event_bus
-                    .publish(Arc::clone(&arc_event))
-                    .unwrap_or_else(|e| {
-                        error!("event bus full: {:?}", e);
-                        0
-                    });
-
-                let mut session_state = state.session_state.write().await;
-                *session_state =
-                    daemon_core::state::apply_event(session_state.clone(), (*arc_event).clone());
-
-                let _ = codec
-                    .send(&IpcMessage::new_response(
-                        id,
-                        Some(serde_json::json!({"status": "stopped", "session_id": session_id})),
-                    ))
-                    .await;
-            } else {
-                let _ = codec
-                    .send(&IpcMessage::new_error(
-                        id,
-                        format!("session not found: {}", session_id),
-                    ))
-                    .await;
-            }
+            crate::handlers::handle_stop_agent(codec, id, session_id, state).await;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use tokio::net::UnixStream;
+    use tokio::sync::Mutex;
+
+    use agentos_ipc::{BridgeCodec, IpcCommand, IpcMessage, IpcServer, IpcStatus, SocketConfig};
+    use agentos_storage::Database;
+
+    use crate::plugin_loader;
+
+    use super::DaemonState;
+
+    #[tokio::test]
+    async fn test_e2e_hook_to_session_via_ipc() {
+        let dir = std::env::temp_dir().join(format!("agentosd-e2e-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let socket_path = dir.join("e2e.sock");
+        let _ = std::fs::remove_file(&socket_path);
+
+        let db = Database::open_in_memory().unwrap();
+        let plugin_registry = plugin_loader::load_default_plugins();
+        let db_arc = Arc::new(Mutex::new(db));
+        let state = Arc::new(DaemonState::new(plugin_registry, Some(db_arc)));
+
+        let config = SocketConfig {
+            path: socket_path.clone(),
+            max_connections: 8,
+        };
+        let server = IpcServer::bind(config).unwrap();
+        let server_path = server.local_path().to_path_buf();
+        let state_clone = state.clone();
+
+        tokio::spawn(async move {
+            while let Ok((codec, _fd)) = server.accept().await {
+                let s = state_clone.clone();
+                tokio::spawn(async move {
+                    super::handle_client(codec, s).await;
+                });
+            }
+        });
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let stream = UnixStream::connect(&server_path).await.unwrap();
+        let (read, write) = stream.into_split();
+        let mut client = BridgeCodec::new(read, write);
+
+        let payload = serde_json::json!({
+            "type": "session_start",
+            "session_id": "e2e-test-session",
+            "model": "gpt-4",
+            "cwd": "/home/user/project"
+        });
+        client
+            .send(&IpcMessage::new_event("opencode", payload))
+            .await
+            .unwrap();
+
+        tokio::time::sleep(Duration::from_millis(200)).await;
+
+        let cmd = IpcMessage::new_command(IpcCommand::GetSessions { filter: None });
+        client.send(&cmd).await.unwrap();
+
+        let response = loop {
+            match client.recv().await.unwrap() {
+                IpcMessage::SubscriptionEvent { .. } => continue,
+                other => break other,
+            }
+        };
+        match response {
+            IpcMessage::Response { status, data, .. } => {
+                assert_eq!(status, IpcStatus::Ok);
+                let sessions: Vec<serde_json::Value> =
+                    serde_json::from_value(data.unwrap()).unwrap();
+                assert_eq!(sessions.len(), 1, "expected 1 session");
+                assert_eq!(sessions[0]["id"], "e2e-test-session");
+                assert_eq!(sessions[0]["agent"], "opencode");
+                assert_eq!(sessions[0]["phase"], "running");
+                assert_eq!(sessions[0]["model"], "gpt-4");
+            }
+            other => panic!("expected Response, got {:?}", other),
+        }
+
+        let _ = std::fs::remove_file(&socket_path);
+    }
+
+    /// 🔴 Critical: The daemon must not crash when it receives garbage over the socket.
+    /// It should log the error and continue responding to subsequent valid commands.
+    #[tokio::test]
+    async fn test_malformed_json_does_not_crash_server() {
+        use tokio::io::AsyncWriteExt;
+
+        let dir = std::env::temp_dir()
+            .join(format!("agentosd-malformed-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let socket_path = dir.join("malformed.sock");
+        let _ = std::fs::remove_file(&socket_path);
+
+        let db = Database::open_in_memory().unwrap();
+        let plugin_registry = plugin_loader::load_default_plugins();
+        let state = Arc::new(DaemonState::new(plugin_registry, Some(Arc::new(Mutex::new(db)))));
+
+        let config = SocketConfig {
+            path: socket_path.clone(),
+            max_connections: 4,
+        };
+        let server = IpcServer::bind(config).unwrap();
+        let server_path = server.local_path().to_path_buf();
+        let state_clone = state.clone();
+
+        tokio::spawn(async move {
+            while let Ok((codec, _fd)) = server.accept().await {
+                let s = state_clone.clone();
+                tokio::spawn(async move { super::handle_client(codec, s).await });
+            }
+        });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        // Connect a raw stream to inject garbage bytes directly.
+        let stream = tokio::net::UnixStream::connect(&server_path).await.unwrap();
+        let (_read_half, mut write_half) = stream.into_split();
+
+        // Send malformed JSON — this must not crash the server.
+        write_half.write_all(b"not json at all\n").await.unwrap();
+        write_half.flush().await.unwrap();
+
+        // Wait briefly for the server to process and drop/ignore the bad message.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        // Now open a fresh connection and send a valid Ping — the server must still respond.
+        let stream2 = tokio::net::UnixStream::connect(&server_path).await.unwrap();
+        let (read2, write2) = stream2.into_split();
+        let mut client2 = BridgeCodec::new(read2, write2);
+
+        let ping_msg = IpcMessage::new_command(IpcCommand::Ping);
+        client2.send(&ping_msg).await.unwrap();
+
+        let response = tokio::time::timeout(Duration::from_secs(2), async {
+            loop {
+                match client2.recv().await.unwrap() {
+                    IpcMessage::SubscriptionEvent { .. } => continue,
+                    other => break other,
+                }
+            }
+        })
+        .await
+        .expect("server did not respond to Ping after receiving malformed JSON");
+
+        match response {
+            IpcMessage::Response { status, .. } => {
+                assert_eq!(status, IpcStatus::Ok, "Ping should return Ok");
+            }
+            other => panic!("expected Ping Response, got {:?}", other),
+        }
+
+        let _ = std::fs::remove_file(&socket_path);
     }
 }

@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { FloatingBar } from "./components/FloatingBar";
 import { Overlay } from "./components/Overlay";
 import { CommandPalette } from "./components/CommandPalette";
 import { Settings } from "./components/Settings";
 import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useCursorEvents } from "./hooks/useCursorEvents";
 import { AnimatePresence, motion } from "framer-motion";
 
 type View = "main" | "settings";
@@ -13,21 +13,19 @@ type View = "main" | "settings";
 export default function App() {
   const [view, setView] = useState<View>("main");
   useKeyboardShortcuts();
+  const { acquire, release } = useCursorEvents("settings");
 
   useEffect(() => {
-    invoke("set_ignore_cursor", { ignore: true });
-  }, []);
+    if (view === "settings") {
+      acquire();
+    } else {
+      release();
+    }
+  }, [view]);
 
   useEffect(() => {
     const unlisten = listen<string>("navigate", (event) => {
-      const path = event.payload;
-      if (path === "/settings") {
-        setView("settings");
-        invoke("set_ignore_cursor", { ignore: false });
-      } else {
-        setView("main");
-        invoke("set_ignore_cursor", { ignore: true });
-      }
+      setView(event.payload === "/settings" ? "settings" : "main");
     });
     return () => {
       unlisten.then((fn) => fn());
@@ -36,7 +34,6 @@ export default function App() {
 
   const handleBack = () => {
     setView("main");
-    invoke("set_ignore_cursor", { ignore: true });
   };
 
   return (

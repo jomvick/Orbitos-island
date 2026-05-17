@@ -12,10 +12,10 @@ fn set_ignore_cursor(app: tauri::AppHandle, ignore: bool) {
 }
 
 fn build_tray_menu(app: &tauri::AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    let show = MenuItem::with_id(app, "show", "Show AgentOS", true, None::<&str>)?;
+    let show = MenuItem::with_id(app, "show", "Show Orbitos Island", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     let settings = MenuItem::with_id(app, "settings", "Preferences…", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit AgentOS", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "Quit Orbitos Island", true, None::<&str>)?;
 
     let menu = Menu::with_items(app, &[&show, &separator, &settings, &separator, &quit])?;
     Ok(menu)

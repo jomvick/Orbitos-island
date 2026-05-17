@@ -5,6 +5,7 @@ use super::kitty;
 use super::tmux;
 use super::wezterm;
 use super::zellij;
+use super::konsole;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TerminalPane {
@@ -22,6 +23,7 @@ pub enum TerminalKind {
     Ghostty,
     WezTerm,
     Kitty,
+    Konsole,
     Other(String),
 }
 
@@ -56,6 +58,9 @@ pub fn detect() -> Option<TerminalKind> {
     if kitty::is_in_kitty() {
         return Some(TerminalKind::Kitty);
     }
+    if konsole::is_in_konsole() {
+        return Some(TerminalKind::Konsole);
+    }
     None
 }
 
@@ -66,6 +71,7 @@ pub fn parse_terminal_kind(s: Option<&str>) -> TerminalKind {
         Some("ghostty") => TerminalKind::Ghostty,
         Some("wezterm" | "WezTerm") => TerminalKind::WezTerm,
         Some("kitty") => TerminalKind::Kitty,
+        Some("konsole" | "Konsole") => TerminalKind::Konsole,
         Some(other) => TerminalKind::Other(other.to_string()),
         None => TerminalKind::Tmux,
     }
@@ -135,6 +141,17 @@ pub fn resolve_jump_target(
             });
             Ok(pane.and_then(|p| p.pane_id))
         }
+        TerminalKind::Konsole => {
+            let panes = konsole::list_panes().map_err(|e| e.to_string())?;
+            let pane = panes.into_iter().find(|p| {
+                if let (Some(pane_pid), Some(target_pid)) = (p.pid, pid) {
+                    pane_pid == target_pid
+                } else {
+                    false
+                }
+            });
+            Ok(pane.and_then(|p| p.pane_id))
+        }
         TerminalKind::Other(other) => Err(format!("unsupported terminal: {}", other)),
     }
 }
@@ -146,6 +163,7 @@ pub fn focus_terminal(pane_id: &str, terminal: Option<&str>) -> Result<(), Strin
         TerminalKind::Ghostty => ghostty::focus_pane(pane_id).map_err(|e| e.to_string()),
         TerminalKind::WezTerm => wezterm::focus_pane(pane_id).map_err(|e| e.to_string()),
         TerminalKind::Kitty => kitty::focus_pane(pane_id).map_err(|e| e.to_string()),
+        TerminalKind::Konsole => konsole::focus_pane(pane_id).map_err(|e| e.to_string()),
         TerminalKind::Other(other) => Err(format!("unsupported terminal: {}", other)),
     }
 }

@@ -1,0 +1,22 @@
+[package]
+name = "agentos-exporter"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+otlp = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+]
+
+[dependencies]
+daemon-core = { path = "../../daemon-core" }
+tokio.workspace = true
+tracing.workspace = true
+chrono.workspace = true
+
+opentelemetry = { version = "0.27", optional = true, default-features = false, features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "0.27", optional = true, default-features = false, features = ["trace", "metrics", "rt-tokio"] }
+opentelemetry-otlp = { version = "0.27", optional = true, default-features = false, features = ["http-proto", "trace", "metrics"] }

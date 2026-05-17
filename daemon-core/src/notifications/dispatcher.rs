@@ -185,7 +185,8 @@ mod tests {
             diff: None,
             error: error.map(String::from),
             metadata: None,
-            timestamp: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+            pid: None,
+            timestamp: chrono::Utc::now(),
         }
     }
 

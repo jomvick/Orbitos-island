@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { motion, AnimatePresence } from "framer-motion";
 import { useSessionStore } from "../stores/sessionStore";
+import { useCursorEvents } from "../hooks/useCursorEvents";
 import { getAgentColor, getAgentDisplayName } from "@agentos/shared-schema";
 
 interface Command {
@@ -21,6 +22,16 @@ export function CommandPalette() {
   const sessions = useSessionStore((s) => s.sessions);
   const setExpanded = useSessionStore((s) => s.setExpanded);
   const setPendingOverlay = useSessionStore((s) => s.setPendingOverlay);
+
+  const { acquire, release } = useCursorEvents("commandpalette");
+
+  useEffect(() => {
+    if (isOpen) {
+      acquire();
+    } else {
+      release();
+    }
+  }, [isOpen]);
 
   const allSessions = useMemo(
     () => Array.from(sessions.values()),

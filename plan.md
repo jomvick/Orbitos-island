@@ -1,19 +1,19 @@
-# 🧠 Vision du Projet
+# 🧠 Project Vision
 
-Créer une application Linux-native qui agit comme :
+Create a Linux-native application that acts as:
 
-> un cockpit système pour agents IA de développement.
+> a system cockpit for AI development agents.
 
-L’application centralise :
+The application centralizes:
 
-* monitoring temps réel
-* notifications intelligentes
-* gestion multi-agents
-* navigation rapide entre sessions terminal
-* analytics d’usage
-* orchestration de workflows IA
+* Real-time monitoring
+* Smart notifications
+* Multi-agent management
+* Fast navigation between terminal sessions
+* Usage analytics
+* AI workflow orchestration
 
-pour :
+For:
 
 * OpenCode
 * Antigravity
@@ -21,24 +21,24 @@ pour :
 * Claude Code
 * Aider
 * Gemini CLI
-* futurs agents
+* Future agents
 
 ---
 
-# 🎯 Objectif du MVP
+# 🎯 MVP Objective
 
-Résoudre immédiatement ces problèmes :
+Immediately solve these common pain points:
 
-✅ agents silencieux
-✅ notifications ratées
-✅ perte de contexte terminal
-✅ multi-agents chaotiques
-✅ aucune vue globale des sessions
-✅ difficulté à retrouver le bon agent
+✅ Silent agents (processing silently in background)
+✅ Missed notifications/approval prompts
+✅ Lost terminal context (forgetting which terminal runs what)
+✅ Chaotic multi-agent coordination
+✅ No global view of active agent sessions
+✅ Difficulty jumping back to the active agent's pane
 
 ---
 
-# 🏗️ Architecture Générale
+# 🏗️ General Architecture
 
 ```txt
 AI Agents
@@ -47,65 +47,64 @@ Hooks / Plugins
     ↓
 Local Event Bus
     ↓
-Core Daemon
+Core Daemon (agentosd)
     ↓
-Desktop UI
+Desktop UI (Orbitos Island)
     ↓
-Notifications / Overlay / Analytics
+Notifications / Overlay HUD / Analytics
 ```
 
 ---
 
-# ⚙️ Stack Technique Finale
+# ⚙️ Final Technical Stack
 
 ## 🔥 Backend Core
 
-| Technologie  | Rôle                         |
-| ------------ | ---------------------------- |
-| Rust         | Performance + daemon système |
-| Tokio        | Async runtime                |
-| Serde        | JSON serialization           |
-| SQLite       | Persistence locale           |
-| Axum         | API locale                   |
-| Unix Sockets | IPC                          |
-| Notify-rust  | Notifications Linux          |
+| Technology | Role |
+| --- | --- |
+| Rust | Performance + system daemon (`agentosd`) |
+| Tokio | Async runtime |
+| Serde | JSON serialization |
+| SQLite | Local persistence |
+| Unix Sockets | IPC communication |
+| Notify-rust | Native Linux notifications |
 
 ---
 
 ## 🎨 Frontend Desktop
 
-| Technologie    | Rôle             |
-| -------------- | ---------------- |
-| Tauri v2       | Desktop shell    |
-| React          | UI               |
-| TypeScript     | Frontend logic   |
-| TailwindCSS    | Styling          |
-| Framer Motion  | Animations       |
-| Zustand        | State management |
-| TanStack Query | Server state     |
+| Technology | Role |
+| --- | --- |
+| Tauri v2 | Desktop shell |
+| React | UI framework |
+| TypeScript | Frontend logic |
+| TailwindCSS | Styling |
+| Framer Motion | Fluid micro-animations |
+| Zustand | State management |
+| TanStack Query | Local server state caching |
 
 ---
 
-## 🧩 Intégrations Terminal
+## 🧩 Terminal Integrations
 
-| Terminal | Priorité |
-| -------- | -------- |
-| tmux     | ⭐⭐⭐⭐⭐    |
-| zellij   | ⭐⭐⭐⭐⭐    |
-| Ghostty  | ⭐⭐⭐⭐     |
-| WezTerm  | ⭐⭐⭐⭐     |
-| Kitty    | ⭐⭐⭐      |
-| Warp     | futur    |
+| Terminal | Priority |
+| --- | --- |
+| tmux | ⭐⭐⭐⭐⭐ |
+| zellij | ⭐⭐⭐⭐⭐ |
+| Ghostty | ⭐⭐⭐⭐ |
+| WezTerm | ⭐⭐⭐⭐ |
+| Kitty | ⭐⭐⭐ |
+| Warp | Future |
 
 ---
 
-# 🧬 Architecture des Modules
+# 🧬 Module Architecture
 
 ---
 
 # 🔵 1. Core Daemon
 
-Nom exemple :
+Technical binary name:
 
 ```txt
 agentosd
@@ -113,46 +112,44 @@ agentosd
 
 ---
 
-## Responsabilités
+## Responsibilities
 
-* recevoir événements
-* maintenir état sessions
-* stocker historique
-* envoyer notifications
-* exposer API locale
-* gérer plugins agents
-* analytics
-* reconnect sessions
+* Receive agent hooks events
+* Maintain active session states
+* Save history and token telemetry
+* Dispatch prioritized notifications
+* Expose a local Unix socket API
+* Load agent plugins
+* Track usage analytics
+* Support session reconnection
 
 ---
 
-## Structure
+## Directory Structure
 
 ```txt
 core/
-├── agents/
-├── events/
-├── sessions/
-├── ipc/
-├── notifications/
-├── terminals/
-├── storage/
-├── analytics/
-├── plugins/
-└── api/
+├── agents/          # Agent abstractions
+├── events/          # EventBus (broadcast channel)
+├── sessions/        # Session state machines
+├── ipc/             # Unix socket IPC protocol
+├── notifications/   # System tray & DBus notifier
+├── terminals/       # tmux/zellij focused terminal detectors
+├── storage/         # SQLite DB migrations and stores
+├── analytics/       # Telemetry parsing & cost models
+├── plugins/         # Dynamic agent parser registries
+└── api/             # Local API handlers
 ```
 
 ---
 
 # 🟣 2. Plugin System
 
-LE composant le plus important.
-
-Chaque agent devient un plugin.
+The core framework component. Each AI agent is treated as an isolated plugin.
 
 ---
 
-## Structure
+## Plugin Directory Structure
 
 ```txt
 plugins/
@@ -166,24 +163,23 @@ plugins/
 
 ---
 
-## Rôle des plugins
+## Role of Plugins
 
-Chaque plugin :
-
-* lit hooks spécifiques
-* parse événements
-* normalise données
-* map vers schema universel
+Each agent-specific plugin:
+* Hooks into agent CLI/API lifecycles
+* Parses output streams/event logs
+* Normalizes telemetry datasets
+* Maps agent-specific events into the **Universal Event Schema**
 
 ---
 
 # 🧩 Universal Event Schema
 
-Très important.
+A standardized model enabling plug-and-play agent integrations.
 
 ---
 
-## Exemple
+## Schema Payload Example
 
 ```json
 {
@@ -192,7 +188,7 @@ Très important.
   "session_id": "abc123",
   "cwd": "/projects/app",
   "branch": "feature/auth",
-  "model": "claude-sonnet-4",
+  "model": "claude-3-5-sonnet",
   "tokens_input": 12000,
   "tokens_output": 8000,
   "duration_ms": 120000,
@@ -206,7 +202,7 @@ Très important.
 
 # 🟢 3. Hook CLI
 
-Nom exemple :
+Technical binary name:
 
 ```bash
 agentos-hook
@@ -214,43 +210,40 @@ agentos-hook
 
 ---
 
-## Fonction
+## Core Function
 
-Les agents exécutent :
+AI coding agents execute hooks:
 
 ```bash
 agentos-hook --event payload.json
 ```
 
-Puis :
-
-* parse
-* valide
-* envoie via socket Unix
+The hook:
+1. Parses and validates the event
+2. Sends the structured JSON via the local Unix socket to `agentosd`
 
 ---
 
-## Objectif
+## Design Objective
 
-Ultra léger :
-
-* démarrage instantané
-* zéro UI
-* dépendances minimales
+Ultra-lightweight:
+* Zero overhead (instant startup)
+* Headless (no GUI dependencies)
+* Native compilation with minimal external dependencies
 
 ---
 
 # 🌌 4. Desktop UI
 
-Nom exemple :
+Product Name:
 
 ```txt
-AgentOS
+Orbitos Island
 ```
 
 ---
 
-# 🖥️ Layout Principal
+# 🖥️ Main Layout Mockup
 
 ```txt
 ┌──────────────────────────┐
@@ -272,192 +265,160 @@ AgentOS
 
 ---
 
-# 🎨 Direction Design
+# 🎨 Design Direction
 
-Style :
+Visual aesthetic:
+* Minimalist
+* Soft cyberpunk accents
+* Terminal-native design language
+* Premium tool feel
 
-* minimal
-* cyberpunk soft
-* terminal-native
-* premium devtool
-
-Inspirations :
-
+Design inspirations:
 * Raycast
 * Linear
 * Warp
-* Arc
+* Arc Browser
 * Apple Dynamic Island
-* Activity Monitor
+* macOS Activity Monitor
 
 ---
 
-# 🧠 Système de Notifications
+# 🧠 Notification System
 
-Très important.
-
----
-
-## Types
-
-| Type          | Comportement          |
-| ------------- | --------------------- |
-| Permission    | popup urgent          |
-| Task complete | toast discret         |
-| Error         | notification rouge    |
-| Long task     | progress notification |
-| Idle          | silencieux            |
+Prioritized alert system to prevent communication fatigue.
 
 ---
 
-## Features
+## Event Classification
 
-✅ sons custom
-✅ priorité intelligente
-✅ actions rapides
-✅ ouvrir terminal directement
-✅ focus session
+| Event Type | Behavior |
+| --- | --- |
+| Permission | Urgent HUD popup overlay |
+| Task complete | Subtle tray toast |
+| Error | Immediate red critical banner |
+| Long task | Ambient progress indicator |
+| Idle | Silent background update |
 
 ---
 
-# 🔥 Fonctionnalités MVP
+## Key Features
+
+✅ Custom alert sounds per agent status
+✅ Intelligent priority throttling (permission > error > complete)
+✅ Quick actionable buttons inside desktop notifications
+✅ Direct terminal jumping on click
+✅ Dynamic session focus tracking
+
+---
+
+# 🔥 MVP Features
 
 ---
 
 # Phase 1 — Core MVP
 
 ## Backend
-
-✅ daemon Rust
-✅ Unix socket IPC
-✅ SQLite
-✅ schema événements
-✅ système plugins
-
----
+✅ Stable Rust core daemon
+✅ Unix Socket IPC pipeline
+✅ Local SQLite schema storage
+✅ Standardized event serialization
+✅ Extensible agent plugin framework
 
 ## Frontend
+✅ Ambient tray icon status widget
+✅ Dynamic session list panel
+✅ Desktop notification alerts
+✅ Sleek, minimal cockpit dashboard
 
-✅ tray icon
-✅ liste sessions
-✅ notifications
-✅ dashboard minimal
-
----
-
-## Intégrations
-
-✅ OpenCode
-✅ Antigravity
-✅ tmux
+## Integrations
+✅ OpenCode support
+✅ Antigravity agent integration
+✅ Native tmux terminal jump detector
 
 ---
 
-# ⚡ Phase 2 — Productivité
+# ⚡ Phase 2 — Productivity
 
 ## Sessions
-
-✅ jump terminal
-✅ focus pane
-✅ session restore
-
----
+✅ Instant terminal jumping
+✅ Direct pane/window focusing
+✅ Interactive session restoration
 
 ## Analytics
-
-✅ tokens
-✅ durée tâches
-✅ historique sessions
-
----
+✅ Live token ingestion tracking
+✅ Task execution duration monitoring
+✅ Historical session search logs
 
 ## UI
-
-✅ timeline
-✅ activity feed
-✅ recherche sessions
+✅ Session activity timeline
+✅ Live activity feeds
+✅ Quick session command palette search
 
 ---
 
 # 🌌 Phase 3 — Premium UX
 
 ## Overlay
+✅ Ambient floating HUD
+✅ Custom status orb animation
+✅ Live heartbeat pulsing glow
 
-✅ floating HUD
-✅ orb animation
-✅ live pulse
+## Smart Features
+✅ Automated task classification
+✅ Priority notification throttling
+✅ Logical workspace session grouping
 
----
-
-## Intelligence
-
-✅ task classification
-✅ smart notifications
-✅ session grouping
-
----
-
-## Visualisation
-
-✅ graphs agents
-✅ repo map
-✅ activity heatmap
+## Visualizations
+✅ Cost & usage analysis graphs
+✅ Workspace file repository mapping
+✅ Contributor activity heatmaps
 
 ---
 
 # 🚀 Phase 4 — AI Operating Layer
 
-Vision long terme.
-
----
+Long term ecosystem vision.
 
 ## Multi-Agent Orchestration
 
-Exemple :
+Example:
 
 ```txt
-Claude → architecture
-Codex → tests
-OpenCode → refactor
+Claude (Architect) → Codex (Write Tests) → OpenCode (Refactor Crate)
 ```
-
----
 
 ## Workflow Automation
 
 ```txt
 When Claude finishes:
-→ open diff
-→ run tests
-→ notify user
+→ open local code diff
+→ launch automated cargo tests
+→ alert user on success
 ```
-
----
 
 ## AI Memory Layer
 
-Historique global :
-
-* projets
-* agents
-* tâches
-* coûts
-* décisions
+Unified workspace execution registry tracking:
+* Multi-repo project footprints
+* Cumulative agent usage
+* Executed tasks and logs
+* Operational token costs
+* Technical design decisions
 
 ---
 
-# 📂 Structure Monorepo Recommandée
+# 📂 Recommended Monorepo Structure
 
 ```txt
 agentos/
 ├── apps/
-│   ├── desktop/
-│   └── settings/
+│   ├── desktop/            # Tauri app (Orbitos Island Cockpit)
+│   └── settings/           # Configuration GUI
 │
 ├── core/
-│   ├── daemon/
-│   ├── ipc/
-│   └── storage/
+│   ├── daemon/             # agentosd executable
+│   ├── ipc/                # Unix socket IPC channel
+│   └── storage/            # SQLite store crate
 │
 ├── plugins/
 │   ├── opencode/
@@ -465,105 +426,83 @@ agentos/
 │   └── codex/
 │
 ├── packages/
-│   ├── shared-schema/
-│   ├── ui/
-│   └── utils/
+│   ├── shared-schema/      # Typescript IPC models
+│   ├── ui/                 # React component library
+│   └── utils/              # Helper utilities
 │
-└── docs/
+└── docs/                   # Documentation & RFCs
 ```
 
 ---
 
-# 🔐 Sécurité
+# 🔐 Security
 
-Important dès le début.
+Engineered locally-first to keep credentials and workspace intellectual property completely private.
 
----
-
-## Règles
-
-✅ localhost only
-✅ sockets Unix privés
-✅ aucun cloud obligatoire
-✅ données locales uniquement
-✅ permissions minimales
+## Rules
+✅ Localhost loopback operations only
+✅ Private Unix socket permissions
+✅ Zero mandatory cloud integration
+✅ Local sqlite storage (fully inspectable)
+✅ Minimal runtime OS capabilities required
 
 ---
 
-# 📈 Ce qui fera la différence
+# 📈 Competitive Differentiator
 
-Le vrai avantage compétitif ne sera PAS :
+The ultimate value proposition is NOT just notification alerts or dashboard widgets, but:
 
-* la UI
-* les notifications
-* le dashboard
+> a standardized event schema combined with sub-second terminal session navigation.
 
-mais :
-
-> le système universel d’événements agents + navigation terminal intelligente.
-
-C’est le cœur du produit.
+This forms the true core of Orbitos Island.
 
 ---
 
-# 🧠 Roadmap Réaliste
+# 🧠 Realistic Roadmap
 
 ---
 
-# Semaine 1
-
-✅ architecture
-✅ schema événements
-✅ daemon minimal
-✅ IPC socket
-
----
-
-# Semaine 2
-
-✅ plugin OpenCode
-✅ plugin Antigravity
-✅ hook CLI
+# Week 1
+✅ Monorepo structural setup
+✅ Universal Event Schema JSON specifications
+✅ Rust Core Daemon scaffolding
+✅ Local socket IPC pipeline
 
 ---
 
-# Semaine 3
-
-✅ tray app Tauri
-✅ notifications
-✅ sessions live
-
----
-
-# Semaine 4
-
-✅ tmux integration
-✅ jump session
-✅ timeline
+# Week 2
+✅ OpenCode normalizer plugin
+✅ Antigravity agent plugin
+✅ Lightweight `agentos-hook` CLI tool
 
 ---
 
-# Mois 2
-
-✅ analytics
-✅ overlays
-✅ zellij support
-✅ graphs
+# Week 3
+✅ Tauri tray companion shell
+✅ DBus desktop notifications
+✅ Real-time session store syncing
 
 ---
 
-# 🎯 Vision Finale
+# Week 4
+✅ tmux pane focusing terminal integrations
+✅ Sub-second terminal jumping
+✅ Live session timeline feeds
 
-Le projet doit devenir :
+---
 
-> l’interface système universelle des agents IA développeurs sur Linux.
+# Month 2
+✅ Telemetry graphs & token cost calculators
+✅ Translucent overlay HUD components
+✅ Zellij session jumping support
+✅ Workspace activity analytics graphs
 
-Pas juste :
+---
 
-* une app tray
-* une app notifications
-* un clone de Vibe Island
+# 🎯 Final Vision
 
-mais :
+The project aims to become:
 
-> une couche OS moderne pour le développement assisté par agents IA.
+> the universal operating-system interface for AI development agents on Linux.
+
+It is designed to be much more than a notification tray, but a modern desktop orchestration layer for agent-assisted software engineering.

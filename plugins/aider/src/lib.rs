@@ -1,29 +1,9 @@
-use chrono::Utc;
-use daemon_core::agents::{AgentPlugin, PluginError, PluginResult};
-use daemon_core::state::{AgentKind, EventKind, UniversalEvent};
-use serde::Deserialize;
-use uuid::Uuid;
-
-#[derive(Deserialize)]
-struct AiderHookPayload {
-    #[serde(rename = "type")]
-    event_type: String,
-    session_id: Option<String>,
-    cwd: Option<String>,
-    branch: Option<String>,
-    model: Option<String>,
-    tokens_input: Option<u64>,
-    tokens_output: Option<u64>,
-    duration_ms: Option<u64>,
-    error: Option<String>,
-    terminal: Option<String>,
-    pane: Option<String>,
-    metadata: Option<serde_json::Value>,
-}
+use daemon_core::agents::{AgentPlugin, SimplePlugin, PluginResult};
+use daemon_core::state::{AgentKind, EventKind};
 
 pub struct AiderPlugin;
 
-impl AgentPlugin for AiderPlugin {
+impl SimplePlugin for AiderPlugin {
     fn name(&self) -> &'static str {
         "aider"
     }
@@ -32,46 +12,32 @@ impl AgentPlugin for AiderPlugin {
         AgentKind::Aider
     }
 
-    fn parse(&self, payload: &str) -> PluginResult {
-        let hook: AiderHookPayload =
-            serde_json::from_str(payload).map_err(|e| PluginError::ParseError(e.to_string()))?;
-
-        let event_kind = match hook.event_type.as_str() {
-            "session_start" | "task_start" | "start" => EventKind::SessionStarted,
+    fn map_event_type(&self, raw_type: &str) -> Option<EventKind> {
+        match raw_type {
+            "session_start" | "task_start" | "start" => Some(EventKind::SessionStarted),
             "session_complete" | "task_complete" | "complete" | "done" => {
-                EventKind::SessionCompleted
+                Some(EventKind::SessionCompleted)
             }
-            "session_failed" | "error" | "fail" => EventKind::SessionFailed,
-            "activity" | "progress" | "think" => EventKind::ActivityUpdated,
-            "heartbeat" => EventKind::Heartbeat,
-            "token_usage" => EventKind::TokenUsage,
-            _ => return Err(PluginError::UnsupportedEvent(hook.event_type)),
-        };
+            "session_failed" | "error" | "fail" => Some(EventKind::SessionFailed),
+            "activity" | "progress" | "think" => Some(EventKind::ActivityUpdated),
+            "heartbeat" => Some(EventKind::Heartbeat),
+            "token_usage" => Some(EventKind::TokenUsage),
+            _ => None,
+        }
+    }
+}
 
-        Ok(Some(UniversalEvent {
-            id: Uuid::new_v4(),
-            agent: AgentKind::Aider,
-            event: event_kind,
-            session_id: hook
-                .session_id
-                .unwrap_or_else(|| Uuid::new_v4().to_string()),
-            cwd: hook.cwd,
-            branch: hook.branch,
-            model: hook.model,
-            tokens_input: hook.tokens_input,
-            tokens_output: hook.tokens_output,
-            duration_ms: hook.duration_ms,
-            terminal: hook.terminal,
-            pane: hook.pane,
-            permission: None,
-            question: None,
-            jump_target: None,
-            error: hook.error,
-            metadata: hook.metadata,
-            plan: None,
-            diff: None,
-            timestamp: Utc::now(),
-        }))
+impl AgentPlugin for AiderPlugin {
+    fn name(&self) -> &'static str {
+        SimplePlugin::name(self)
+    }
+
+    fn agent_kind(&self) -> AgentKind {
+        SimplePlugin::agent_kind(self)
+    }
+
+    fn parse(&self, payload: &str) -> PluginResult {
+        self.parse_base(payload)
     }
 }
 

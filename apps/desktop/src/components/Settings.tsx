@@ -87,7 +87,7 @@ export function Settings() {
         </div>
         <div>
           <h1 className="text-[15px] font-bold text-white/90">Preferences</h1>
-          <p className="text-[11px] text-white/40">Configure AgentOS behavior</p>
+          <p className="text-[11px] text-white/40">Configure Orbitos Island behavior</p>
         </div>
       </div>
 
@@ -120,7 +120,7 @@ export function Settings() {
               className="space-y-2"
             >
               <p className="text-[11px] text-white/30 uppercase tracking-[0.1em] font-bold px-1">Startup</p>
-              <SettingRow label="Launch at login" description="Automatically start AgentOS on login">
+              <SettingRow label="Launch at login" description="Automatically start Orbitos Island on login">
                 <Toggle enabled={autoStart} onChange={setAutoStart} />
               </SettingRow>
 
@@ -136,7 +136,7 @@ export function Settings() {
               <SettingRow label="Socket path" description="Unix socket for IPC">
                 <input
                   type="text"
-                  defaultValue="/tmp/agentosd.sock"
+                  defaultValue="~/.agentos/run/agentosd.sock"
                   className="w-44 px-2 py-1 rounded-lg bg-white/5 border border-white/10 text-[11px] font-mono text-white/60 text-right focus:outline-none focus:border-indigo-500/50"
                 />
               </SettingRow>
@@ -234,7 +234,7 @@ export function Settings() {
                 <span className="text-2xl font-bold text-indigo-400">A</span>
               </div>
               <div className="text-center">
-                <h2 className="text-[15px] font-bold text-white/90">AgentOS</h2>
+                <h2 className="text-[15px] font-bold text-white/90">Orbitos Island</h2>
                 <p className="text-[12px] text-white/40">v0.1.0</p>
               </div>
               <p className="text-[12px] text-white/40 text-center max-w-xs leading-relaxed">

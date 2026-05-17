@@ -7,10 +7,15 @@ edition = "2021"
 name = "agentosd"
 path = "src/main.rs"
 
+[features]
+default = []
+otlp = ["agentos-exporter/otlp"]
+
 [dependencies]
 daemon-core = { path = "../../daemon-core" }
 agentos-ipc = { path = "../ipc" }
 agentos-storage = { path = "../storage" }
+agentos-exporter = { path = "../exporter" }
 tokio.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -30,3 +35,6 @@ plugin-gemini = { path = "../../plugins/gemini" }
 plugin-cursor = { path = "../../plugins/cursor" }
 plugin-copilot = { path = "../../plugins/copilot" }
 plugin-deepseek = { path = "../../plugins/deepseek" }
+
+[dev-dependencies]
+tempfile = "3"

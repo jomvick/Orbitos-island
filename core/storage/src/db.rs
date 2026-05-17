@@ -88,9 +88,15 @@ impl Database {
             ",
         )?;
 
+        // v2 migration: non-breaking — adds pid column for process watcher support.
+        // ALTER TABLE is idempotent via the duplicate column guard in SQLite (errors are ignored).
+        let _ = self.conn.execute_batch(
+            "ALTER TABLE sessions ADD COLUMN pid INTEGER;"
+        );
+
         self.conn.execute(
             "INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (?1, ?2)",
-            params![1, chrono::Utc::now().timestamp()],
+            params![2, chrono::Utc::now().timestamp()],
         )?;
 
         info!("database migrations applied successfully");
@@ -101,8 +107,8 @@ impl Database {
         let metadata = session.metadata.as_ref().map(|m| m.to_string());
 
         self.conn.execute(
-            "INSERT INTO sessions (id, agent, phase, cwd, branch, model, tokens_input, tokens_output, duration_ms, terminal, pane, metadata, error, created_at, updated_at, last_heartbeat, event_count)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
+            "INSERT INTO sessions (id, agent, phase, cwd, branch, model, tokens_input, tokens_output, duration_ms, terminal, pane, metadata, error, pid, created_at, updated_at, last_heartbeat, event_count)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
              ON CONFLICT(id) DO UPDATE SET
                 phase = excluded.phase,
                 cwd = excluded.cwd,
@@ -115,6 +121,7 @@ impl Database {
                 pane = excluded.pane,
                 metadata = excluded.metadata,
                 error = excluded.error,
+                pid = excluded.pid,
                 updated_at = excluded.updated_at,
                 last_heartbeat = excluded.last_heartbeat,
                 event_count = excluded.event_count",
@@ -132,6 +139,7 @@ impl Database {
                 session.pane,
                 metadata,
                 session.error,
+                session.pid,
                 session.created_at.timestamp(),
                 session.updated_at.timestamp(),
                 session.last_heartbeat.timestamp(),
@@ -144,7 +152,7 @@ impl Database {
 
     pub fn insert_event(&self, event: &UniversalEvent) -> Result<(), DbError> {
         self.conn.execute(
-            "INSERT INTO events (id, session_id, agent, event_kind, payload, timestamp)
+            "INSERT OR IGNORE INTO events (id, session_id, agent, event_kind, payload, timestamp)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 event.id.to_string(),
@@ -161,7 +169,7 @@ impl Database {
     pub fn get_active_sessions(&self) -> Result<Vec<StoredSession>, DbError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, agent, phase, cwd, branch, model, tokens_input, tokens_output, duration_ms,
-                    terminal, pane, metadata, error, created_at, updated_at, last_heartbeat, event_count
+                    terminal, pane, metadata, error, pid, created_at, updated_at, last_heartbeat, event_count
              FROM sessions
              WHERE phase IN ('running', 'waiting_permission', 'waiting_question', 'paused')
              ORDER BY updated_at DESC",
@@ -183,10 +191,11 @@ impl Database {
                     pane: row.get(10)?,
                     metadata: row.get(11)?,
                     error: row.get(12)?,
-                    created_at: row.get(13)?,
-                    updated_at: row.get(14)?,
-                    last_heartbeat: row.get(15)?,
-                    event_count: row.get(16)?,
+                    pid: row.get(13)?,
+                    created_at: row.get(14)?,
+                    updated_at: row.get(15)?,
+                    last_heartbeat: row.get(16)?,
+                    event_count: row.get(17)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -197,7 +206,7 @@ impl Database {
     pub fn get_all_sessions(&self, limit: u32) -> Result<Vec<StoredSession>, DbError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, agent, phase, cwd, branch, model, tokens_input, tokens_output, duration_ms,
-                    terminal, pane, metadata, error, created_at, updated_at, last_heartbeat, event_count
+                    terminal, pane, metadata, error, pid, created_at, updated_at, last_heartbeat, event_count
              FROM sessions
              ORDER BY updated_at DESC
              LIMIT ?1",
@@ -219,10 +228,11 @@ impl Database {
                     pane: row.get(10)?,
                     metadata: row.get(11)?,
                     error: row.get(12)?,
-                    created_at: row.get(13)?,
-                    updated_at: row.get(14)?,
-                    last_heartbeat: row.get(15)?,
-                    event_count: row.get(16)?,
+                    pid: row.get(13)?,
+                    created_at: row.get(14)?,
+                    updated_at: row.get(15)?,
+                    last_heartbeat: row.get(16)?,
+                    event_count: row.get(17)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -273,6 +283,7 @@ mod tests {
             diff: None,
             error: None,
             metadata: None,
+            pid: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             last_heartbeat: chrono::Utc::now(),
@@ -358,6 +369,7 @@ mod tests {
             diff: None,
             error: None,
             metadata: None,
+            pid: None,
             timestamp: chrono::Utc::now(),
         };
 
@@ -402,5 +414,67 @@ mod tests {
 
         let results = db.search_sessions("my-project").unwrap();
         assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_upsert_session_is_idempotent() {
+        let db = test_db();
+        let session = sample_session("opencode");
+
+        db.upsert_session(&session).unwrap();
+        db.upsert_session(&session).unwrap();
+
+        let sessions = db.get_all_sessions(10).unwrap();
+        assert_eq!(sessions.len(), 1);
+    }
+
+    #[test]
+    fn test_insert_event_duplicate_uuid_ignored() {
+        let db = test_db();
+        let session_id = Uuid::new_v4().to_string();
+        let mut session = sample_session("opencode");
+        session.id.clone_from(&session_id);
+        db.upsert_session(&session).unwrap();
+
+        let event = UniversalEvent {
+            id: Uuid::new_v4(),
+            agent: AgentKind::Opencode,
+            event: EventKind::SessionStarted,
+            session_id,
+            cwd: None,
+            branch: None,
+            model: None,
+            tokens_input: None,
+            tokens_output: None,
+            duration_ms: None,
+            terminal: None,
+            pane: None,
+            permission: None,
+            question: None,
+            jump_target: None,
+            plan: None,
+            diff: None,
+            error: None,
+            metadata: None,
+            pid: None,
+            timestamp: chrono::Utc::now(),
+        };
+
+        db.insert_event(&event).unwrap();
+        db.insert_event(&event).unwrap();
+
+        let timeline = db.get_timeline(10).unwrap();
+        assert_eq!(timeline.len(), 1);
+    }
+
+    #[test]
+    fn test_analytics_empty_database() {
+        let db = test_db();
+        let stats = db.get_session_stats().unwrap();
+        assert_eq!(stats.total_sessions, 0);
+        assert_eq!(stats.active_count, 0);
+        assert_eq!(stats.total_tokens, 0);
+        assert_eq!(stats.total_duration_hours, 0.0);
+        assert!(stats.agents.is_empty());
     }
 }

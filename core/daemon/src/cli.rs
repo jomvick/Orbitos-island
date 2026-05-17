@@ -9,8 +9,8 @@ use clap::Parser;
     about = "AgentOS daemon - AI agent system cockpit"
 )]
 pub struct CliArgs {
-    #[arg(short = 's', long = "socket", default_value = ".agentosd.sock")]
-    pub socket_path: PathBuf,
+    #[arg(short = 's', long = "socket")]
+    pub socket_path: Option<PathBuf>,
 
     #[arg(
         short = 'd',
@@ -30,4 +30,7 @@ pub struct CliArgs {
 
     #[arg(long = "discover", help = "Run agent discovery and exit")]
     pub discover: bool,
+
+    #[arg(long = "otlp-endpoint", help = "OpenTelemetry OTLP HTTP endpoint (e.g. http://localhost:4318)")]
+    pub otlp_endpoint: Option<String>,
 }

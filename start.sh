@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 
-echo "=== AgentOS — starting all services ==="
+echo "=== Orbitos Island — starting all services ==="
 
 # 1. Daemon
 echo "[1/3] Starting daemon..."

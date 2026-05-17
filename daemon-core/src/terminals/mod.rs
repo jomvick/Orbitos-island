@@ -4,6 +4,7 @@ pub mod kitty;
 pub mod tmux;
 pub mod wezterm;
 pub mod zellij;
+pub mod konsole;
 
 pub use detector::*;
 
@@ -39,6 +40,12 @@ mod tests {
     fn test_parse_terminal_kind_kitty() {
         let kind = parse_terminal_kind(Some("kitty"));
         assert_eq!(kind, TerminalKind::Kitty);
+    }
+
+    #[test]
+    fn test_parse_terminal_kind_konsole() {
+        let kind = parse_terminal_kind(Some("konsole"));
+        assert_eq!(kind, TerminalKind::Konsole);
     }
 
     #[test]

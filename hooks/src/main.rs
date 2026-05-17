@@ -24,6 +24,11 @@ struct Cli {
 
     #[arg(long = "from-stdin", help = "Read payload from stdin (default)")]
     from_stdin: bool,
+
+    /// OS process ID of the agent — forwarded by the shell wrapper.
+    /// When provided, it is injected into the event payload as `pid`.
+    #[arg(long = "pid", help = "Agent process ID (set by shell wrapper)")]
+    pid: Option<u32>,
 }
 
 fn main() {
@@ -72,7 +77,7 @@ fn main() {
             .unwrap_or_else(|| input.trim().to_string());
     }
 
-    let event_value: serde_json::Value = match serde_json::from_str(&payload) {
+    let mut event_value: serde_json::Value = match serde_json::from_str(&payload) {
         Ok(v) => v,
         Err(e) => {
             eprintln!("[agentos-hook] invalid event JSON: {}", e);
@@ -80,9 +85,17 @@ fn main() {
         }
     };
 
+    // Inject pid into the payload if provided via --pid flag.
+    if let Some(pid) = cli.pid {
+        if let serde_json::Value::Object(ref mut map) = event_value {
+            map.insert("pid".to_string(), serde_json::json!(pid));
+        }
+    }
+
     if let Err(e) = sender::send_event(&source, event_value) {
         eprintln!("[agentos-hook] {}", e);
     }
 
     std::process::exit(0);
 }
+

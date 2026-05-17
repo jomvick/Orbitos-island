@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 fn get_socket_path() -> String {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    format!("{}/.agentosd.sock", home)
+    format!("{}/.agentos/run/agentosd.sock", home)
 }
 
 #[derive(Clone, Serialize)]
@@ -81,7 +81,8 @@ pub async fn connect_and_listen(app: AppHandle) -> Result<(), String> {
                                     .unwrap_or("unknown")
                                     .to_string(),
                                 data: msg
-                                    .get("event")
+                                    .get("session")
+                                    .or_else(|| msg.get("event"))
                                     .cloned()
                                     .unwrap_or(serde_json::Value::Null),
                                 timestamp: chrono::Utc::now().to_rfc3339(),

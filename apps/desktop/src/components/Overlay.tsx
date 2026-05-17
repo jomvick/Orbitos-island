@@ -1,10 +1,32 @@
+import { useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../stores/sessionStore";
+import { useCursorEvents } from "../hooks/useCursorEvents";
 import { getAgentColor, getAgentDisplayName } from "@agentos/shared-schema";
+
+const PERMISSION_TIMEOUT_MS = 5 * 60 * 1000;
 
 export function Overlay() {
   const pendingOverlay = useSessionStore((s) => s.pendingOverlay);
   const setPendingOverlay = useSessionStore((s) => s.setPendingOverlay);
+
+  const { acquire, release } = useCursorEvents("overlay");
+
+  useEffect(() => {
+    if (pendingOverlay) {
+      acquire();
+    } else {
+      release();
+    }
+  }, [pendingOverlay]);
+
+  useEffect(() => {
+    if (!pendingOverlay) return;
+    const timer = setTimeout(() => {
+      setPendingOverlay(null);
+    }, PERMISSION_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [pendingOverlay, setPendingOverlay]);
 
   if (!pendingOverlay) return null;
 
@@ -55,12 +77,12 @@ export function Overlay() {
   return (
     <div
       className="fixed inset-0 z-[200] flex items-center justify-center
-        bg-[#050505]/60 backdrop-blur-sm font-sans"
+      bg-[#050505]/60 backdrop-blur-sm font-sans"
       onClick={() => setPendingOverlay(null)}
     >
       <div
         className="w-[440px] rounded-[24px] bg-[#0C0C0E]/90 border border-white/5
-          p-8 shadow-[0_40px_80px_rgba(0,0,0,0.6)]"
+        p-8 shadow-[0_40px_80px_rgba(0,0,0,0.6)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 mb-8">
@@ -86,19 +108,19 @@ export function Overlay() {
                 {pendingOverlay.permission.command}
               </div>
             </div>
-            
+
             <div className="flex gap-3">
               <button
                 className="flex-1 px-4 py-3 rounded-xl text-[13px] font-semibold
-                  bg-white/[0.03] hover:bg-white/5 text-white/40 hover:text-red-400 transition-all cursor-pointer border border-white/5"
+                bg-white/[0.03] hover:bg-white/5 text-white/40 hover:text-red-400 transition-all cursor-pointer border border-white/5"
                 onClick={handleReject}
               >
                 Reject
               </button>
               <button
                 className="flex-1 px-4 py-3 rounded-xl text-[13px] font-semibold
-                  text-white transition-all cursor-pointer shadow-lg
-                  hover:brightness-110 active:scale-[0.98] border border-white/10"
+                text-white transition-all cursor-pointer shadow-lg
+                hover:brightness-110 active:scale-[0.98] border border-white/10"
                 style={{ backgroundColor: color }}
                 onClick={handleApprove}
               >
@@ -118,8 +140,8 @@ export function Overlay() {
                 <button
                   key={i}
                   className="w-full px-5 py-4 rounded-xl text-[13px] font-medium text-left
-                    bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 text-white/70
-                    transition-all cursor-pointer"
+                  bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 text-white/70
+                  transition-all cursor-pointer"
                   onClick={() => handleAnswer(option)}
                 >
                   {option}

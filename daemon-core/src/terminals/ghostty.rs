@@ -44,6 +44,7 @@ pub fn list_panes() -> Result<Vec<TerminalPane>, GhosttyError> {
     let panes: Vec<serde_json::Value> = serde_json::from_str(&stdout).unwrap_or_default();
     let result = panes
         .into_iter()
+<<<<<<< HEAD
         .map(|p| TerminalPane {
             pane_id: p.get("id").and_then(|v| v.as_str().map(String::from)),
             pid: p.get("pid").and_then(|v| v.as_u64().map(|n| n as u32)),

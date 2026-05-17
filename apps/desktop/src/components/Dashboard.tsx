@@ -49,7 +49,9 @@ function TabPanel({ tab, tabDir, children }: { tab: Tab; tabDir: number; childre
       exit="exit"
       transition={{ duration: 0.18, ease: [0.4, 0, 0.2, 1] }}
     >
-      {children}
+      <Suspense fallback={<TabFallback />}>
+        {children}
+      </Suspense>
     </motion.div>
   );
 }
@@ -116,7 +118,7 @@ export function Dashboard({ embedded }: { embedded?: boolean }) {
           <div className="flex items-center gap-2">
             <div className="w-2.5 h-2.5 rounded-full bg-accent-blue shadow-[0_0_10px_rgba(59,130,246,0.5)]" />
             <h2 className="text-[11px] font-bold text-white/50 tracking-[0.2em] uppercase font-mono">
-              AgentOS / Cockpit
+              Orbitos / Cockpit
             </h2>
           </div>
           
@@ -152,7 +154,6 @@ export function Dashboard({ embedded }: { embedded?: boolean }) {
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 pb-6 custom-scrollbar">
-        <Suspense fallback={<TabFallback />}>
           <AnimatePresence mode="wait" custom={tabDir}>
             {tab === "timeline" && (
               <TabPanel tab={tab} tabDir={tabDir}>
@@ -251,7 +252,6 @@ export function Dashboard({ embedded }: { embedded?: boolean }) {
               </TabPanel>
             )}
           </AnimatePresence>
-        </Suspense>
       </div>
     </>
   );

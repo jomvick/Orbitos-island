@@ -30,6 +30,18 @@ export const useSessionStore = create<SessionStore>((set) => ({
       sessions.set(session.id, session);
       return { sessions };
     }),
+  orphanRunningSessions: () =>
+    set((state) => {
+      const sessions = new Map(state.sessions);
+      let changed = false;
+      for (const [id, session] of sessions) {
+        if (session.phase === "running" || session.phase === "waiting_permission" || session.phase === "waiting_question") {
+          sessions.set(id, { ...session, phase: "orphaned" });
+          changed = true;
+        }
+      }
+      return changed ? { sessions, pendingOverlay: null } : state;
+    }),
   syncSessions: (incoming) =>
     set((state) => {
       const sessions = new Map<string, AgentSession>();

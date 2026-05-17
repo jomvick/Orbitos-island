@@ -27,6 +27,9 @@ pub struct AgentSession {
     pub diff: Option<DiffPayload>,
     pub error: Option<String>,
     pub metadata: Option<serde_json::Value>,
+    /// OS process ID provided by the shell wrapper — used by the process watcher.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pid: Option<u32>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub last_heartbeat: DateTime<Utc>,
@@ -54,6 +57,7 @@ impl AgentSession {
             diff: event.diff.clone(),
             error: None,
             metadata: event.metadata.clone(),
+            pid: event.pid,
             created_at: event.timestamp,
             updated_at: event.timestamp,
             last_heartbeat: event.timestamp,
@@ -142,7 +146,8 @@ mod tests {
             diff: None,
             error: None,
             metadata: None,
-            timestamp: Utc::now(),
+            pid: None,
+            timestamp: chrono::Utc::now(),
         }
     }
 
@@ -371,7 +376,11 @@ mod tests {
     #[test]
     fn test_token_usage_updates_counts() {
         let state = SessionState::new();
-        let start = make_event("sess-1", EventKind::SessionStarted, AgentKind::Claude);
+        let start = UniversalEvent {
+            tokens_input: None,
+            tokens_output: None,
+            ..make_event("sess-1", EventKind::SessionStarted, AgentKind::Claude)
+        };
         let state = apply_event(state, start);
 
         let tokens = UniversalEvent {
@@ -698,6 +707,126 @@ mod tests {
         );
         assert_eq!(state.active_count(), 1);
     }
+
+    #[test]
+    fn test_completed_ignores_post_completion_events() {
+        let state = SessionState::new();
+        let start = make_event("s-1", EventKind::SessionStarted, AgentKind::Claude);
+        let state = apply_event(state, start);
+
+        let complete = UniversalEvent {
+            tokens_input: Some(5000),
+            tokens_output: Some(2000),
+            duration_ms: Some(120000),
+            ..make_event("s-1", EventKind::SessionCompleted, AgentKind::Claude)
+        };
+        let state = apply_event(state, complete);
+        assert_eq!(state.sessions.get("s-1").unwrap().phase, SessionPhase::Completed);
+
+        let late = UniversalEvent {
+            tokens_input: None,
+            tokens_output: None,
+            ..make_event("s-1", EventKind::TokenUsage, AgentKind::Claude)
+        };
+        let state = apply_event(state, late);
+
+        let session = state.sessions.get("s-1").unwrap();
+        assert_eq!(session.phase, SessionPhase::Completed);
+    }
+
+    #[test]
+    fn test_duplicate_session_started_does_not_duplicate() {
+        let state = SessionState::new();
+        let s1 = make_event("s-1", EventKind::SessionStarted, AgentKind::Opencode);
+        let state = apply_event(state, s1);
+        let s2 = make_event("s-1", EventKind::SessionStarted, AgentKind::Opencode);
+        let state = apply_event(state, s2);
+        assert_eq!(state.sessions.len(), 1);
+    }
+
+    #[test]
+    fn test_metrics_accumulate_correctly() {
+        let state = SessionState::new();
+        let start = UniversalEvent {
+            tokens_input: None,
+            tokens_output: None,
+            ..make_event("s-1", EventKind::SessionStarted, AgentKind::Claude)
+        };
+        let state = apply_event(state, start);
+
+        let t1 = UniversalEvent {
+            tokens_input: Some(100),
+            tokens_output: Some(50),
+            ..make_event("s-1", EventKind::TokenUsage, AgentKind::Claude)
+        };
+        let state = apply_event(state, t1);
+
+        let t2 = UniversalEvent {
+            tokens_input: Some(200),
+            tokens_output: Some(100),
+            ..make_event("s-1", EventKind::TokenUsage, AgentKind::Claude)
+        };
+        let state = apply_event(state, t2);
+
+        let session = state.sessions.get("s-1").unwrap();
+        assert_eq!(session.tokens_input, 300);
+        assert_eq!(session.tokens_output, 150);
+    }
+
+    #[test]
+    fn test_permission_cleared_after_resolution() {
+        let state = SessionState::new();
+        let start = make_event("s-1", EventKind::SessionStarted, AgentKind::Opencode);
+        let state = apply_event(state, start);
+
+        let perm = UniversalEvent {
+            permission: Some(PermissionRequest {
+                id: Uuid::new_v4(),
+                command: "allow bash".to_string(),
+                description: "Execute shell command".to_string(),
+                context: None,
+                created_at: Utc::now(),
+                expires_at: Utc::now() + chrono::Duration::minutes(5),
+            }),
+            ..make_event("s-1", EventKind::PermissionRequested, AgentKind::Opencode)
+        };
+        let state = apply_event(state, perm);
+
+        let resolve = make_event("s-1", EventKind::ActionableStateResolved, AgentKind::Opencode);
+        let state = apply_event(state, resolve);
+
+        let session = state.sessions.get("s-1").unwrap();
+        assert!(session.permission.is_none());
+        assert_eq!(session.phase, SessionPhase::Running);
+    }
+
+    #[test]
+    fn test_prune_orphaned_does_not_touch_active() {
+        let mut state = SessionState::new();
+
+        let start = make_event("active", EventKind::SessionStarted, AgentKind::Opencode);
+        state = apply_event(state, start);
+
+        let start2 = UniversalEvent {
+            tokens_input: None,
+            tokens_output: None,
+            ..make_event("orphan", EventKind::SessionStarted, AgentKind::Claude)
+        };
+        state = apply_event(state, start2);
+
+        let complete = make_event("orphan", EventKind::SessionCompleted, AgentKind::Claude);
+        state = apply_event(state, complete);
+
+        {
+            let session = state.sessions.get_mut("orphan").unwrap();
+            session.updated_at = Utc::now() - chrono::Duration::hours(2);
+        }
+
+        state.prune_orphaned(chrono::Duration::hours(1));
+
+        assert!(state.sessions.contains_key("active"));
+        assert!(!state.sessions.contains_key("orphan"));
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -792,8 +921,8 @@ pub fn apply_event(mut state: SessionState, event: UniversalEvent) -> SessionSta
         }
         EventKind::TokenUsage => {
             if let Some(session) = state.sessions.get_mut(&session_id) {
-                session.tokens_input = event.tokens_input.unwrap_or(session.tokens_input);
-                session.tokens_output = event.tokens_output.unwrap_or(session.tokens_output);
+                session.tokens_input += event.tokens_input.unwrap_or(0);
+                session.tokens_output += event.tokens_output.unwrap_or(0);
                 session.model = event.model.or(session.model.clone());
                 session.updated_at = event.timestamp;
                 session.last_heartbeat = event.timestamp;

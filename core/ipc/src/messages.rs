@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use daemon_core::state::{AgentKind, UniversalEvent};
+use daemon_core::state::{AgentKind, AgentSession, UniversalEvent};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -31,6 +31,8 @@ pub enum IpcMessage {
     SubscriptionEvent {
         channel: String,
         event: Box<UniversalEvent>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        session: Option<AgentSession>,
         timestamp: DateTime<Utc>,
     },
 }

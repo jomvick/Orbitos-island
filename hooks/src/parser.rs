@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct HookInput {
     pub source: Option<String>,
     pub event: Option<serde_json::Value>,

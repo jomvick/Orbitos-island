@@ -49,6 +49,7 @@ export function useDaemonConnection() {
   const goOffline = useCallback(() => {
     setConnected(false);
     useSessionStore.getState().setConnected(false);
+    useSessionStore.getState().orphanRunningSessions();
   }, []);
 
   const syncAllSessions = useCallback(async () => {
@@ -102,8 +103,41 @@ export function useDaemonConnection() {
         "daemon-event",
         (event) => {
           const payload = event.payload;
-          const session = payload.data;
+          let session = payload.data as any;
           if (session) {
+            // Map UniversalEvent to AgentSession structure if it's a raw event
+            if (session.session_id && !session.id) {
+              const eventKind = session.event;
+              let phase = "running";
+              if (eventKind === "session_completed") phase = "completed";
+              else if (eventKind === "session_failed") phase = "failed";
+              else if (eventKind === "session_paused") phase = "paused";
+              else if (eventKind === "permission_requested") phase = "waiting_permission";
+              else if (eventKind === "question_asked") phase = "waiting_question";
+
+              session = {
+                id: session.session_id,
+                agent: session.agent,
+                phase,
+                tokens_input: session.tokens_input ?? 0,
+                tokens_output: session.tokens_output ?? 0,
+                duration_ms: session.duration_ms ?? 0,
+                created_at: session.timestamp ?? new Date().toISOString(),
+                updated_at: session.timestamp ?? new Date().toISOString(),
+                last_heartbeat: session.timestamp ?? new Date().toISOString(),
+                event_count: 1,
+                cwd: session.cwd,
+                branch: session.branch,
+                model: session.model,
+                permission: session.permission,
+                question: session.question,
+                jump_target: session.jump_target,
+                plan: session.plan,
+                diff: session.diff,
+                error: session.error,
+              };
+            }
+
             upsertSession(session);
             if (
               session.phase === "waiting_permission" ||
@@ -147,22 +181,9 @@ export function useDaemonConnection() {
         }
       }, PING_INTERVAL_MS);
 
-      // Dynamic session refresh — adapts to activity
-      const scheduleRefresh = () => {
-        const idle = !hasActiveSessions();
-        const ms = idle ? REFRESH_IDLE_MS : REFRESH_ACTIVE_MS;
-        refreshRef.current = setInterval(async () => {
-          if (!useSessionStore.getState().connected) {
-            clearInterval(refreshRef.current!);
-            return;
-          }
-          await syncAllSessions();
-          // Re-evaluate interval on next cycle
-          clearInterval(refreshRef.current!);
-          scheduleRefresh();
-        }, ms);
-      };
-      scheduleRefresh();
+      // Removed dynamic session refresh to prevent desync with real-time events.
+      // We now rely solely on real-time daemon events for state updates,
+      // and only use syncAllSessions for initial hydration and recovery.
     };
 
     setup();

@@ -44,13 +44,23 @@ impl BridgeCodec {
 
     pub async fn recv(&mut self) -> Result<IpcMessage, CodecError> {
         let mut line = String::new();
-        let n = self.reader.read_line(&mut line).await?;
+        
+        // Security Fix: Bound the reader to prevent unbounded memory allocation (DoS)
+        // by malicious clients sending data without a newline.
+        use tokio::io::AsyncReadExt;
+        let mut limited_reader = (&mut self.reader).take((MAX_MESSAGE_SIZE + 1) as u64);
+        
+        let n = limited_reader.read_line(&mut line).await?;
         if n == 0 {
             return Err(CodecError::ConnectionClosed);
         }
-        if n > MAX_MESSAGE_SIZE {
+        
+        // If the line doesn't end with a newline, it means we hit the take() limit 
+        // before finding the delimiter.
+        if !line.ends_with('\n') {
             return Err(CodecError::MessageTooLarge(n));
         }
+        
         let msg: IpcMessage = serde_json::from_str(line.trim())?;
         Ok(msg)
     }

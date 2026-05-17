@@ -105,7 +105,7 @@ fn find_binary(name: &str) -> Option<String> {
         })
 }
 
-fn expand_home(path: &str) -> PathBuf {
+pub fn expand_home(path: &str) -> PathBuf {
     if let Some(rest) = path.strip_prefix("~/") {
         if let Ok(home) = std::env::var("HOME") {
             return PathBuf::from(home).join(rest);
@@ -295,7 +295,7 @@ pub fn discover_agents() -> DiscoverResult {
 
     let daemon_socket = find_binary("agentos-hook").map(|_| {
         let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        format!("{}/.agentosd.sock", home)
+        format!("{}/.agentos/run/agentosd.sock", home)
     });
 
     DiscoverResult {
@@ -337,6 +337,139 @@ pub fn find_all_binaries() -> HashMap<String, Vec<String>> {
         }
     }
     result
+}
+
+// ─── Shell Wrapper Installation ───────────────────────────────────────────────
+
+/// Result of installing a single agent wrapper.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct WrapperResult {
+    pub agent: String,
+    pub wrapper_path: String,
+    pub installed: bool,
+    pub message: String,
+}
+
+/// Installs transparent shell wrapper scripts into `~/.local/share/agentos/bin/`
+/// and prepends that directory to the user's shell RC files (.bashrc, .zshrc,
+/// fish config). Call this at daemon startup so wrappers are always in sync.
+pub fn install_shell_wrappers() -> Vec<WrapperResult> {
+    let wrapper_dir = expand_home("~/.local/share/agentos/bin");
+    let hook_bin = find_binary("agentos-hook").unwrap_or_else(|| "agentos-hook".to_string());
+
+    let mut results = Vec::new();
+
+    // Ensure wrapper directory exists
+    if let Err(e) = std::fs::create_dir_all(&wrapper_dir) {
+        warn!(error = %e, "failed to create wrapper dir");
+        return results;
+    }
+
+    for agent in AGENTS {
+        // Only wrap agents whose real binary is actually installed.
+        let Some(real_bin) = agent.binaries.iter().find_map(|b| find_binary(b)) else {
+            continue;
+        };
+
+        let wrapper_path = wrapper_dir.join(agent.name);
+
+        // Skip if the real binary IS already our wrapper (avoid recursion).
+        if real_bin == wrapper_path.to_string_lossy() {
+            continue;
+        }
+
+        let script = build_wrapper_script(agent.name, &real_bin, &hook_bin);
+
+        match std::fs::write(&wrapper_path, &script) {
+            Ok(_) => {
+                // chmod +x
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let _ = std::fs::set_permissions(
+                        &wrapper_path,
+                        std::fs::Permissions::from_mode(0o755),
+                    );
+                }
+                info!(agent = %agent.name, path = %wrapper_path.display(), "wrapper installed");
+                results.push(WrapperResult {
+                    agent: agent.name.to_string(),
+                    wrapper_path: wrapper_path.to_string_lossy().to_string(),
+                    installed: true,
+                    message: format!("wrapper installed at {}", wrapper_path.display()),
+                });
+            }
+            Err(e) => {
+                warn!(agent = %agent.name, error = %e, "failed to write wrapper");
+                results.push(WrapperResult {
+                    agent: agent.name.to_string(),
+                    wrapper_path: wrapper_path.to_string_lossy().to_string(),
+                    installed: false,
+                    message: format!("write failed: {}", e),
+                });
+            }
+        }
+    }
+
+    // Inject wrapper dir into shell RC files if not already present.
+    let path_line = format!(
+        "\n# AgentOS — transparent agent wrappers\nexport PATH=\"{}:$PATH\"\n",
+        wrapper_dir.display()
+    );
+    let fish_line = format!(
+        "\n# AgentOS — transparent agent wrappers\nfish_add_path \"{}\"\n",
+        wrapper_dir.display()
+    );
+    let wrapper_marker = "AgentOS — transparent agent wrappers";
+
+    for rc in &["~/.bashrc", "~/.zshrc"] {
+        let rc_path = expand_home(rc);
+        inject_into_rc(&rc_path, &path_line, wrapper_marker);
+    }
+
+    // Fish uses a different mechanism
+    let fish_config = expand_home("~/.config/fish/config.fish");
+    if fish_config.parent().map(|p| p.exists()).unwrap_or(false) {
+        inject_into_rc(&fish_config, &fish_line, wrapper_marker);
+    }
+
+    results
+}
+
+/// Injects `content` into `path` only if `marker` is not already present.
+fn inject_into_rc(path: &std::path::Path, content: &str, marker: &str) {
+    if path.exists() {
+        match std::fs::read_to_string(path) {
+            Ok(existing) if existing.contains(marker) => return, // already injected
+            Err(e) => {
+                warn!(path = %path.display(), error = %e, "cannot read RC file");
+                return;
+            }
+            _ => {}
+        }
+    }
+    if let Err(e) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .and_then(|mut f| {
+            use std::io::Write;
+            f.write_all(content.as_bytes())
+        })
+    {
+        warn!(path = %path.display(), error = %e, "cannot append to RC file");
+    } else {
+        info!(path = %path.display(), "PATH injection written");
+    }
+}
+
+/// Renders the wrapper script for a given agent.
+fn build_wrapper_script(agent_name: &str, real_bin: &str, hook_bin: &str) -> String {
+    // Embed the template at compile time so the binary is fully self-contained.
+    let tmpl = include_str!("../../../scripts/wrappers/agent-wrapper.sh.tmpl");
+    tmpl.replace("AGENT_PLACEHOLDER", agent_name)
+        .replace("REAL_BIN_PLACEHOLDER", real_bin)
+        .replace("HOOK_BIN_PLACEHOLDER", hook_bin)
 }
 
 #[cfg(test)]
@@ -381,6 +514,39 @@ mod tests {
 
     #[test]
     fn test_find_all_binaries() {
-        let _bins = find_all_binaries();
+        let bins = find_all_binaries();
+        let _ = bins.contains_key("claude");
+    }
+
+    #[test]
+    fn test_build_wrapper_script_substitutes_placeholders() {
+        let script = build_wrapper_script("opencode", "/usr/bin/opencode", "/usr/bin/agentos-hook");
+        assert!(script.contains("opencode"), "agent name must appear in script");
+        assert!(script.contains("/usr/bin/opencode"), "real binary path must appear");
+        assert!(!script.contains("AGENT_PLACEHOLDER"), "no unresolved placeholders");
+        assert!(!script.contains("REAL_BIN_PLACEHOLDER"), "no unresolved placeholders");
+    }
+
+    #[test]
+    fn test_inject_into_rc_idempotent() {
+        let tmp = std::env::temp_dir().join(format!("agentos-rc-test-{}.sh", std::process::id()));
+        let marker = "AgentOS test marker";
+        let content = format!("\n# {}\nexport PATH=\"/test:$PATH\"\n", marker);
+
+        // First injection
+        inject_into_rc(&tmp, &content, marker);
+        let after_first = std::fs::read_to_string(&tmp).unwrap();
+        assert!(after_first.contains(marker));
+
+        // Second injection — must be idempotent (no duplicate)
+        inject_into_rc(&tmp, &content, marker);
+        let after_second = std::fs::read_to_string(&tmp).unwrap();
+        assert_eq!(
+            after_second.matches(marker).count(),
+            1,
+            "marker must appear exactly once"
+        );
+
+        let _ = std::fs::remove_file(&tmp);
     }
 }

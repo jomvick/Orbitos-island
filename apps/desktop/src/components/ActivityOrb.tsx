@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useMemo, useEffect } from "react";
+import { motion, AnimatePresence, useAnimate } from "framer-motion";
 import { useSessionStore } from "../stores/sessionStore";
 
 export function ActivityOrb() {
@@ -7,6 +7,8 @@ export function ActivityOrb() {
   const isExpanded = useSessionStore((s) => s.isExpanded);
   const toggleExpanded = useSessionStore((s) => s.toggleExpanded);
   const setPendingOverlay = useSessionStore((s) => s.setPendingOverlay);
+
+  const [scope, animateControls] = useAnimate();
 
   const { activity, color, pulseSpeed, glowIntensity, hasUrgent } =
     useMemo(() => {
@@ -49,6 +51,16 @@ export function ActivityOrb() {
         hasUrgent: urgent,
       };
     }, [sessions]);
+
+  useEffect(() => {
+    if (!scope.current) return;
+    const controls = animateControls(
+      scope.current,
+      { rotate: [0, 360] },
+      { duration: 4 / pulseSpeed, repeat: Infinity, ease: "linear" }
+    );
+    return () => controls.stop();
+  }, [pulseSpeed, animateControls, scope]);
 
   if (isExpanded) return null;
 
@@ -94,16 +106,11 @@ export function ActivityOrb() {
             }}
           />
 
-          <motion.div
+          <div
+            ref={scope}
             className="absolute inset-1 rounded-full"
             style={{
               background: `conic-gradient(from 0deg, ${color}, transparent, ${color}88, transparent, ${color})`,
-            }}
-            animate={{ rotate: [0, 360] }}
-            transition={{
-              duration: 4 / pulseSpeed,
-              repeat: Infinity,
-              ease: "linear",
             }}
           />
 
