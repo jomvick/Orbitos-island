@@ -9,3 +9,4 @@ Thumbs.db
 apps/desktop/node_modules/
 apps/desktop/.tauri/
 apps/desktop/src-tauri/target/
+design-system/

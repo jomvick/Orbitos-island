@@ -21,6 +21,7 @@ Inspired by [Vibe Island](https://vibeisland.ai) and [Open Island](https://open-
 * **Session Timeline** — Full event history per agent: tokens, duration, model, errors.
 * **Command Palette** — Search sessions by agent, project, or command. Focus any session instantly.
 * **Analytics** — Token usage, session duration, cost estimates, agent activity graphs.
+* **Audio Notifications** — System sound alerts for permission requests, task errors, and completions via PipeWire/PulseAudio/ALSA.
 * **Notifications** — Smart Linux-native notifications with priority (permission > error > complete > activity).
 * **Tray Icon** — Quick glance at active sessions, start/stop services.
 
@@ -202,7 +203,7 @@ agentos/
 | Desktop Shell | Tauri v2 |
 | Frontend UI | React, TypeScript, TailwindCSS |
 | State Engine | Zustand, TanStack Query |
-| Sound / Alerts | notify-rust |
+| Sound / Alerts | notify-rust, pw-play / paplay / aplay |
 
 ---
 
@@ -225,8 +226,8 @@ We have organized our pending roadmap and recent core analysis findings into **a
 - [x] Daemon IPC protocol, normalizer plugins, state machine, and persistence.
 - [x] 9 AI agent integrations and tmux session jumping.
 - [x] Translucent Tauri floating desktop bar, command palette, and overlay HUD.
+- [x] [System Sound Alerts (Issue #7)](https://github.com/jomvick/Orbitos-island/issues/7) — Custom PipeWire sound playbacks on high-priority agent transitions.
 - [ ] [Plan Review Overlay (Issue #6)](https://github.com/jomvick/Orbitos-island/issues/6) — Inline file diff visualization inside permission prompt overlays.
-- [ ] [System Sound Alerts (Issue #7)](https://github.com/jomvick/Orbitos-island/issues/7) — Custom PipeWire sound playbacks on high-priority agent transitions.
 - [ ] [Agent Auto-Discovery (Issue #8)](https://github.com/jomvick/Orbitos-island/issues/8) — Setup assistant detecting local agent installs and placing hooks automatically.
 - [ ] [Timeline Filters & Pagination (Issue #9)](https://github.com/jomvick/Orbitos-island/issues/9) — Database-level query limits and dropdown filters for timeline feeds.
 - [ ] [Vibe Island Feature Parity (Issue #10)](https://github.com/jomvick/Orbitos-island/issues/10) — SSH tunneling port forwards, daily token quotas, and smart action triggers.
@@ -238,6 +239,11 @@ We have organized our pending roadmap and recent core analysis findings into **a
 - [ ] [Native kitty & Ghostty Focus Jump (Issue #14)](https://github.com/jomvick/Orbitos-island/issues/14) — Focus non-multiplexed terminal windows utilizing native remote interfaces.
 - [ ] [Wayland Layer-Shell Overlay Positioning (Issue #15)](https://github.com/jomvick/Orbitos-island/issues/15) — GTK layer-shell window bounds configurations for solid float on Wayland.
 - [ ] [API Token Pricing and Budget Thresholds (Issue #16)](https://github.com/jomvick/Orbitos-island/issues/16) — Multi-model price trackers and hard notifications when budgets are reached.
+
+### Verified Technical Debt:
+- [ ] [Replace bare unwrap() with expect() (Issue #17)](https://github.com/jomvick/Orbitos-island/issues/17) — Better panic messages in Tauri startup path.
+- [ ] [Add retry to agentos-hook sender (Issue #18)](https://github.com/jomvick/Orbitos-island/issues/18) — Single retry for transient daemon unavailability.
+- [ ] [Type IPC payload with discriminated union (Issue #19)](https://github.com/jomvick/Orbitos-island/issues/19) — Replace `as any` casts with typed event unions.
 
 ---
 

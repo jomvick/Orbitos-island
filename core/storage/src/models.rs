@@ -14,6 +14,7 @@ pub struct StoredSession {
     pub pane: Option<String>,
     pub metadata: Option<String>,
     pub error: Option<String>,
+    pub current_action: Option<String>,
     /// OS process ID — may be None for sessions started before v2 migration.
     pub pid: Option<u32>,
     pub created_at: i64,
@@ -42,6 +43,7 @@ impl StoredSession {
             plan: None,
             diff: None,
             error: self.error.clone(),
+            current_action: self.current_action.clone(),
             metadata: self
                 .metadata
                 .as_ref()

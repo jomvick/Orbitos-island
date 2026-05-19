@@ -265,6 +265,7 @@ pub async fn handle_resolve_permission(codec: &mut BridgeCodec, id: Uuid, permis
                 plan: None,
                 diff: None,
                 error: None,
+                current_action: None,
                 metadata: Some(serde_json::json!({
                     "resolved_by": "user",
                     "approved": approved
@@ -339,6 +340,7 @@ pub async fn handle_answer_question(codec: &mut BridgeCodec, id: Uuid, question_
                 plan: None,
                 diff: None,
                 error: None,
+current_action: None,
                 metadata: Some(serde_json::json!({
                     "resolved_by": "user",
                     "answer": answer
@@ -404,6 +406,7 @@ pub async fn handle_stop_agent(codec: &mut BridgeCodec, id: Uuid, session_id: St
             plan: None,
             diff: None,
             error: Some("stopped by user".to_string()),
+            current_action: None,
             metadata: Some(serde_json::json!({
                 "stopped_by": "user"
             })),

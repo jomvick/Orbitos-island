@@ -73,6 +73,7 @@ export interface AgentSession {
   plan?: PlanProposal;
   diff?: DiffPayload;
   error?: string;
+  current_action?: string;
   metadata?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
@@ -99,6 +100,7 @@ export interface UniversalEvent {
   plan?: PlanProposal;
   diff?: DiffPayload;
   error?: string;
+  current_action?: string;
   metadata?: Record<string, unknown>;
   timestamp: string;
 }

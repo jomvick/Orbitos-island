@@ -1,4 +1,5 @@
 mod daemon_client;
+mod sounds;
 
 use tauri::Emitter;
 use tauri::Manager;
@@ -14,36 +15,53 @@ fn set_ignore_cursor(app: tauri::AppHandle, ignore: bool) {
 async fn update_window_size(
     width: f64,
     height: f64,
+    center: Option<bool>,
     window: tauri::WebviewWindow,
 ) -> Result<(), String> {
     if width <= 0.0 || height <= 0.0 {
         return Err(format!("Invalid window dimensions: {}x{}", width, height));
     }
 
-    // Capture current window size and position to preserve screen centering
-    let current_size = window.outer_size().map_err(|e| e.to_string())?;
-    let current_pos = window.outer_position().map_err(|e| e.to_string())?;
     let scale_factor = window.current_monitor()
         .map_err(|e| e.to_string())?
         .map(|m| m.scale_factor())
         .unwrap_or(1.0);
 
-    let current_width_logical = current_size.width as f64 / scale_factor;
-    let current_pos_x_logical = current_pos.x as f64 / scale_factor;
-
-    // Calculate new x coordinate to keep the horizontal center stable
-    let dx = width - current_width_logical;
-    let new_x = current_pos_x_logical - (dx / 2.0);
-
     // Apply new size
     window.set_size(tauri::Size::Logical(tauri::LogicalSize { width, height }))
         .map_err(|e| e.to_string())?;
 
-    // Apply new position to maintain center alignment
-    window.set_position(tauri::Position::Logical(tauri::LogicalPosition {
-        x: new_x,
-        y: current_pos.y as f64 / scale_factor,
-    })).map_err(|e| e.to_string())?;
+    if center.unwrap_or(false) {
+        // Re-center horizontally on the current monitor
+        if let Ok(Some(monitor)) = window.current_monitor() {
+            let monitor_size = monitor.size();
+            let monitor_width = monitor_size.width as f64 / scale_factor;
+            let monitor_height = monitor_size.height as f64 / scale_factor;
+            let new_x = (monitor_width - width) / 2.0;
+            let new_y = (monitor_height - height) / 2.0;
+            window.set_position(tauri::Position::Logical(tauri::LogicalPosition {
+                x: new_x,
+                y: new_y,
+            })).map_err(|e| e.to_string())?;
+        }
+    } else {
+        // Capture current window size and position to preserve screen centering
+        let current_size = window.outer_size().map_err(|e| e.to_string())?;
+        let current_pos = window.outer_position().map_err(|e| e.to_string())?;
+
+        let current_width_logical = current_size.width as f64 / scale_factor;
+        let current_pos_x_logical = current_pos.x as f64 / scale_factor;
+
+        // Calculate new x coordinate to keep the horizontal center stable
+        let dx = width - current_width_logical;
+        let new_x = current_pos_x_logical - (dx / 2.0);
+
+        // Apply new position to maintain center alignment
+        window.set_position(tauri::Position::Logical(tauri::LogicalPosition {
+            x: new_x,
+            y: current_pos.y as f64 / scale_factor,
+        })).map_err(|e| e.to_string())?;
+    }
 
     Ok(())
 }
@@ -182,7 +200,8 @@ pub fn run() {
             set_ignore_cursor,
             update_window_size,
             start_drag,
-            ensure_always_on_top
+            ensure_always_on_top,
+            sounds::play_sound
         ])
         .run(tauri::generate_context!())
         .expect("error while running agentos desktop");

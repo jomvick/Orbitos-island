@@ -223,6 +223,10 @@ pub struct UniversalEvent {
     pub plan: Option<PlanProposal>,
     pub diff: Option<DiffPayload>,
     pub error: Option<String>,
+    /// Human-readable description of what the agent is currently doing.
+    /// Set by the plugin on activity/permission events.
+    /// Example: "Refactoring auth module", "Writing src/main.rs"
+    pub current_action: Option<String>,
     pub metadata: Option<serde_json::Value>,
     /// OS process ID of the agent — forwarded by the shell wrapper on session_start.
     /// Used by the process watcher to detect crashed/killed sessions.

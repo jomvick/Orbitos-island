@@ -19,7 +19,7 @@ export default function App() {
     if (view === "settings") {
       acquire();
       import("@tauri-apps/api/core").then(({ invoke }) => {
-        invoke("update_window_size", { width: 560, height: 600 }).catch(console.error);
+        invoke("update_window_size", { width: 560, height: 600, center: true }).catch(console.error);
       });
     } else {
       release();

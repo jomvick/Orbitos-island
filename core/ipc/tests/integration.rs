@@ -27,6 +27,7 @@ fn make_event() -> UniversalEvent {
         plan: None,
         diff: None,
         error: None,
+        current_action: None,
         metadata: None,
         pid: None,
         timestamp: Utc::now(),

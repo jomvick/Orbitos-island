@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { getSettings, updateSettings } from "../stores/settingsStore";
 
 type SettingsTab = "general" | "plugins" | "terminals" | "notifications" | "about";
 
@@ -44,9 +45,15 @@ function Toggle({ enabled, onChange }: { enabled: boolean; onChange: (v: boolean
 export function Settings() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("general");
 
+  const settings = useSyncExternalStore(
+    (cb) => {
+      window.addEventListener("storage", cb);
+      return () => window.removeEventListener("storage", cb);
+    },
+    () => getSettings(),
+  );
+
   const [autoStart, setAutoStart] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [terminalJump, setTerminalJump] = useState(true);
   const [analyticsEnabled, setAnalyticsEnabled] = useState(true);
 
@@ -214,10 +221,18 @@ export function Settings() {
             >
               <p className="text-[11px] text-white/30 uppercase tracking-[0.1em] font-bold px-1">Notifications</p>
               <SettingRow label="Enable notifications" description="Show desktop notifications">
-                <Toggle enabled={notificationsEnabled} onChange={setNotificationsEnabled} />
+                <Toggle enabled={settings.notificationsEnabled} onChange={(v) => updateSettings({ notificationsEnabled: v })} />
               </SettingRow>
-              <SettingRow label="Notification sounds" description="Play sound on notifications">
-                <Toggle enabled={soundEnabled} onChange={setSoundEnabled} />
+
+              <p className="text-[11px] text-white/30 uppercase tracking-[0.1em] font-bold px-1 mt-4">Sound Alerts</p>
+              <SettingRow label="Permission request" description="Urgent double-pulse tone when agent needs approval">
+                <Toggle enabled={settings.sounds.permission_request} onChange={(v) => updateSettings({ sounds: { ...settings.sounds, permission_request: v } })} />
+              </SettingRow>
+              <SettingRow label="Task failed" description="Warning tone when a session errors out">
+                <Toggle enabled={settings.sounds.task_error} onChange={(v) => updateSettings({ sounds: { ...settings.sounds, task_error: v } })} />
+              </SettingRow>
+              <SettingRow label="Task completed" description="Subtle chime when a session completes">
+                <Toggle enabled={settings.sounds.task_completed} onChange={(v) => updateSettings({ sounds: { ...settings.sounds, task_completed: v } })} />
               </SettingRow>
             </motion.div>
           )}

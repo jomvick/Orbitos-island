@@ -2,6 +2,7 @@ import { useEffect, useCallback, useRef, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../stores/sessionStore";
+import { shouldPlaySound } from "../stores/settingsStore";
 import type { AgentSession } from "@agentos/shared-schema";
 
 interface DaemonEventPayload {
@@ -106,14 +107,23 @@ export function useDaemonConnection() {
           let session = payload.data as any;
           if (session) {
             // Map UniversalEvent to AgentSession structure if it's a raw event
-            if (session.session_id && !session.id) {
-              const eventKind = session.event;
-              let phase = "running";
-              if (eventKind === "session_completed") phase = "completed";
-              else if (eventKind === "session_failed") phase = "failed";
-              else if (eventKind === "session_paused") phase = "paused";
-              else if (eventKind === "permission_requested") phase = "waiting_permission";
-              else if (eventKind === "question_asked") phase = "waiting_question";
+              if (session.session_id && !session.id) {
+                const eventKind = session.event;
+                let phase = "running";
+                if (eventKind === "session_completed") phase = "completed";
+                else if (eventKind === "session_failed") phase = "failed";
+                else if (eventKind === "session_paused") phase = "paused";
+                else if (eventKind === "permission_requested") phase = "waiting_permission";
+                else if (eventKind === "question_asked") phase = "waiting_question";
+
+                // Play sound alerts for high-priority events
+                if (shouldPlaySound("permission_request") && eventKind === "permission_requested") {
+                  invoke("play_sound", { sound: "permission_request" }).catch(() => {});
+                } else if (shouldPlaySound("task_error") && eventKind === "session_failed") {
+                  invoke("play_sound", { sound: "task_error" }).catch(() => {});
+                } else if (shouldPlaySound("task_completed") && eventKind === "session_completed") {
+                  invoke("play_sound", { sound: "task_completed" }).catch(() => {});
+                }
 
               session = {
                 id: session.session_id,
@@ -135,6 +145,7 @@ export function useDaemonConnection() {
                 plan: session.plan,
                 diff: session.diff,
                 error: session.error,
+                current_action: session.current_action,
               };
             }
 

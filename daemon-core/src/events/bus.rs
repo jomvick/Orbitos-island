@@ -72,6 +72,7 @@ mod tests {
             plan: None,
             diff: None,
             error: None,
+            current_action: None,
             metadata: None,
             pid: None,
             timestamp: chrono::Utc::now(),

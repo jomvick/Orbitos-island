@@ -21,3 +21,4 @@ tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 chrono = "0.4"
 uuid = { version = "1", features = ["v4", "serde"] }
+which = "7"

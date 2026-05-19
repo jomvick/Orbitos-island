@@ -73,6 +73,27 @@ async fn main() {
         Some(db_for_events.clone()),
     ));
 
+    // Restore active sessions from database into in-memory state
+    // so that sessions started before this daemon instance are visible.
+    {
+        let db = db_for_events.lock().await;
+        match db.get_active_sessions() {
+            Ok(stored_sessions) => {
+                let restored = stored_sessions.len();
+                let mut session_state = state.session_state.write().await;
+                for stored in stored_sessions {
+                    if let Ok(session) = stored.to_domain() {
+                        session_state.sessions.insert(session.id.clone(), session);
+                    }
+                }
+                info!(count = %restored, "restored active sessions from database");
+            }
+            Err(e) => {
+                error!(error = %e, "failed to restore active sessions from database");
+            }
+        }
+    }
+
     {
         let session_state = state.session_state.read().await;
         let count = session_state.total_count();
@@ -96,6 +117,30 @@ async fn main() {
         let watcher_state = state.clone();
         tokio::spawn(async move {
             watcher::start_process_watcher(watcher_state).await;
+        });
+    }
+
+    // Stale session watchdog — marks running sessions as orphaned
+    // if they haven't sent a heartbeat in 30 seconds.
+    {
+        let watchdog_state = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(10));
+            loop {
+                interval.tick().await;
+                let mut session_state = watchdog_state.session_state.write().await;
+                let stale_threshold = chrono::Duration::seconds(30);
+                let mut orphaned = 0;
+                for (_, session) in session_state.sessions.iter_mut() {
+                    if session.is_active() && session.is_stale(&stale_threshold) {
+                        session.phase = daemon_core::state::SessionPhase::Orphaned;
+                        orphaned += 1;
+                    }
+                }
+                if orphaned > 0 {
+                    tracing::info!(count = %orphaned, "orphaned stale sessions");
+                }
+            }
         });
     }
 

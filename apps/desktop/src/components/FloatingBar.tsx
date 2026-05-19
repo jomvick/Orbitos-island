@@ -4,10 +4,8 @@ import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "
 import { useDaemonConnection } from "../hooks/useDaemonConnection";
 import { useCursorEvents } from "../hooks/useCursorEvents";
 import { getAgentColor, getAgentDisplayName } from "@agentos/shared-schema";
+import type { AgentSession } from "@agentos/shared-schema";
 import { Dashboard } from "./Dashboard";
-import { TokenBars } from "./TokenBars";
-
-// ─── AnimatedNumber ─────────────────────────────────────────────
 
 function AnimatedNumber({ value, duration = 0.6 }: { value: number; duration?: number }) {
 const count = useMotionValue(0);
@@ -20,8 +18,6 @@ return controls.stop;
 
 return <motion.span>{rounded}</motion.span>;
 }
-
-// ─── AgentIcon ──────────────────────────────────────────────────
 
 function AgentIcon({ agent, size = 22 }: { agent: string; size?: number }) {
 const color = getAgentColor(agent);
@@ -53,8 +49,6 @@ style={{ color, fontSize: size * 0.55 }}
 </motion.div>
 );
 }
-
-// ─── PhaseDot ───────────────────────────────────────────────────
 
 function PhaseDot({ phase }: { phase: string }) {
 const phaseColors: Record<string, string> = {
@@ -94,7 +88,40 @@ boxShadow: `0 0 10px ${color}44`,
 );
 }
 
-// ─── FloatingBar (Ripple-inspired Island) ───────────────────────
+const TERMINAL_ICONS: Record<string, string> = {
+tmux: "tmux",
+zellij: "zellij",
+ghostty: "ghostty",
+wezterm: "wez",
+kitty: "kitty",
+};
+
+function TerminalBadge({ terminal }: { terminal?: string }) {
+if (!terminal) return null;
+const label = TERMINAL_ICONS[terminal] ?? terminal.slice(0, 4);
+return (
+<span className="text-[10px] font-mono text-white/30 px-1.5 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.06]">
+{label}
+</span>
+);
+}
+
+const PRIORITY: Record<string, number> = {
+waiting_permission: 0,
+waiting_question: 1,
+running: 2,
+};
+
+function pickPrioritySession(sessions: AgentSession[]): AgentSession | null {
+if (sessions.length === 0) return null;
+let best = sessions[0];
+for (const s of sessions) {
+if ((PRIORITY[s.phase] ?? 99) < (PRIORITY[best.phase] ?? 99)) {
+best = s;
+}
+}
+return best;
+}
 
 type PillBorderState = "offline" | "idle" | "running" | "waiting_permission" | "waiting_question" | "failed";
 
@@ -121,11 +148,13 @@ const safeInvoke = async (cmd: string, args?: any) => {
 export function FloatingBar() {
 const sessions = useSessionStore((s) => s.sessions);
 const setExpanded = useSessionStore((s) => s.setExpanded);
+const setPendingOverlay = useSessionStore((s) => s.setPendingOverlay);
 const isExpanded = useSessionStore((s) => s.isExpanded);
 const { connected } = useDaemonConnection();
 const [isHovered, setIsHovered] = useState(false);
 const [isFocused, setIsFocused] = useState(false);
 const [isDragging, setIsDragging] = useState(false);
+const [stopAllConfirm, setStopAllConfirm] = useState(false);
 const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 const containerRef = useRef<HTMLDivElement>(null);
 const lastSize = useRef({ width: 364, height: 78 });
@@ -134,10 +163,8 @@ const currentWindowSize = useRef({ width: 364, height: 78 });
 
 const { acquire, release } = useCursorEvents("floatingbar");
 
-// Handle Dragging using Tauri Native start_drag command
 const handleMouseDown = (e: React.MouseEvent) => {
   const target = e.target as HTMLElement;
-  // Don't drag if clicking interactive elements like buttons, badges, or input items
   if (
     target.closest("button") ||
     target.closest("a") ||
@@ -181,7 +208,6 @@ useEffect(() => {
   }
 }, [isExpanded, isFocused]);
 
-// ResizeObserver with layout smoothing to prevent animation clipping and system stutter
 useEffect(() => {
   if (!containerRef.current || typeof ResizeObserver === "undefined") return;
 
@@ -200,13 +226,10 @@ useEffect(() => {
         shrinkTimeoutRef.current = null;
       }
 
-      // If the actual measured content has grown beyond our currently allocated window boundary,
-      // instantly resize the physical window to accommodate it to prevent any visual clipping!
       if (width > currentWindowSize.current.width || height > currentWindowSize.current.height) {
         currentWindowSize.current = { width, height };
         safeInvoke("update_window_size", { width, height });
       } else {
-        // Otherwise, wait 350ms for Framer Motion transitions to fully settle before cropping the bounds down
         shrinkTimeoutRef.current = setTimeout(() => {
           currentWindowSize.current = { width, height };
           safeInvoke("update_window_size", { width, height });
@@ -232,26 +255,22 @@ const activeSessions = Array.from(sessions.values()).filter((s) =>
 ["running", "waiting_permission", "waiting_question"].includes(s.phase)
 );
 
-const active = activeSessions[0];
+const prioritySession = pickPrioritySession(activeSessions);
 const extraCount = activeSessions.length - 1;
-const hasPermission = active?.permission != null;
-const hasQuestion = active?.question != null;
 
 const pillState: PillBorderState = !connected
 ? "offline"
-: !active
+: !prioritySession
 ? "idle"
-: active.phase === "waiting_permission"
+: prioritySession.phase === "waiting_permission"
 ? "waiting_permission"
-: active.phase === "waiting_question"
+: prioritySession.phase === "waiting_question"
 ? "waiting_question"
-: active.phase === "failed"
+: prioritySession.phase === "failed"
 ? "failed"
 : "running";
 
-const isWaiting = pillState === "waiting_permission" || pillState === "waiting_question";
-
-// Instantly pre-allocate physical window space on state transitions to prevent animation clipping
+// Instantly pre-allocate physical window space on state transitions
 useEffect(() => {
   const expandWindow = async () => {
     let targetWidth = 340;
@@ -259,69 +278,88 @@ useEffect(() => {
 
     if (isExpanded) {
       targetWidth = 720;
-      targetHeight = 700; // very generous canvas for the Cockpit dashboard
+      targetHeight = 700;
     } else if (isHovered || isFocused) {
-      targetWidth = 340;
-      targetHeight = active ? 420 : 300; // very generous canvas for the hover panel
+      targetWidth = 420;
+      targetHeight = activeSessions.length > 0
+        ? Math.min(52 + activeSessions.length * 72 + 80, 520)
+        : 200;
     } else {
-      // Shrinking: handled by the debounced settle crop in ResizeObserver
       return;
     }
 
     const width = targetWidth + 24;
     const height = targetHeight + 24;
     currentWindowSize.current = { width, height };
-    await safeInvoke("update_window_size", { width, height });
+    await safeInvoke("update_window_size", { width, height, center: isExpanded });
   };
 
   expandWindow();
-}, [isExpanded, isHovered, isFocused, !!active]);
+}, [isExpanded, isHovered, isFocused, activeSessions.length]);
 
-// Dynamic border color based on active agent theme color or connection state
 const getBorderColor = () => {
-  if (!connected) return "rgba(239, 68, 68, 0.4)"; // Red for offline
-  if (active) {
-    if (active.phase === "waiting_permission" || active.phase === "waiting_question") {
-      return "rgba(245, 158, 11, 0.4)"; // Amber for warnings
+  if (!connected) return "rgba(239, 68, 68, 0.4)";
+  if (prioritySession) {
+    if (prioritySession.phase === "waiting_permission" || prioritySession.phase === "waiting_question") {
+      return "rgba(245, 158, 11, 0.4)";
     }
-    if (active.phase === "failed") {
-      return "rgba(239, 68, 68, 0.4)"; // Red for failed
+    if (prioritySession.phase === "failed") {
+      return "rgba(239, 68, 68, 0.4)";
     }
-    const agentColor = getAgentColor(active.agent);
-    return `${agentColor}66`; // Padded with 40% opacity for a premium neon border
+    const agentColor = getAgentColor(prioritySession.agent);
+    return `${agentColor}66`;
   }
-  return "rgba(255, 255, 255, 0.08)"; // Subtle border for idle
+  return "rgba(255, 255, 255, 0.08)";
 };
 
-// Dynamic box shadow and neon glow based on connection and active agent state
 const getBoxShadow = () => {
   if (!connected) {
     return "0 12px 40px rgba(0, 0, 0, 0.5), 0 0 20px rgba(239, 68, 68, 0.15)";
   }
-  if (active) {
-    if (active.phase === "waiting_permission" || active.phase === "waiting_question") {
+  if (prioritySession) {
+    if (prioritySession.phase === "waiting_permission" || prioritySession.phase === "waiting_question") {
       return "0 12px 40px rgba(0, 0, 0, 0.5), 0 0 24px rgba(245, 158, 11, 0.25)";
     }
-    if (active.phase === "failed") {
+    if (prioritySession.phase === "failed") {
       return "0 12px 40px rgba(0, 0, 0, 0.5), 0 0 24px rgba(239, 68, 68, 0.2)";
     }
-    const agentColor = getAgentColor(active.agent);
-    return `0 12px 40px rgba(0, 0, 0, 0.5), 0 0 20px ${agentColor}22`; // Subtle agent color glow!
+    const agentColor = getAgentColor(prioritySession.agent);
+    return `0 12px 40px rgba(0, 0, 0, 0.5), 0 0 20px ${agentColor}22`;
   }
-  return "0 12px 40px rgba(0, 0, 0, 0.4)"; // Sleek default shadow
+  return "0 12px 40px rgba(0, 0, 0, 0.4)";
 };
 
 const phaseLabel = !connected
 ? "Offline"
-: !active
+: !prioritySession
 ? "Orbitos Island"
-: active.phase === "waiting_permission"
+: prioritySession.phase === "waiting_permission"
 ? "needs permission"
-: active.phase === "waiting_question"
+: prioritySession.phase === "waiting_question"
 ? "needs input"
-: active.phase.replace("_", " ");
+: prioritySession.phase.replace("_", " ");
 
-const targetWidth = isExpanded ? 720 : 340;
+const hasAnyPermission = activeSessions.some((s) => s.permission != null);
+const hasAnyQuestion = activeSessions.some((s) => s.question != null);
+
+const handleStopAll = async () => {
+  for (const s of activeSessions) {
+    await safeInvoke("stop_agent", { sessionId: s.id });
+  }
+  setStopAllConfirm(false);
+};
+
+const handleSessionClick = (session: AgentSession) => {
+  if (session.permission) {
+    setPendingOverlay(session);
+    return;
+  }
+  if (session.jump_target || session.terminal) {
+    safeInvoke("jump_to_session", { sessionId: session.id });
+  }
+};
+
+const targetWidth = isExpanded ? 720 : 420;
 
 return (
 <div ref={containerRef} className="p-3 w-fit pointer-events-none">
@@ -347,6 +385,7 @@ onMouseEnter={() => {
           hoverTimeoutRef.current = setTimeout(() => {
             if (!isExpanded) release();
             setIsHovered(false);
+            setStopAllConfirm(false);
           }, HOVER_GRACE_MS);
         }}
 onFocus={() => setIsFocused(true)}
@@ -354,78 +393,85 @@ onBlur={() => setIsFocused(false)}
 >
 {/* ── Main Content Row ── */}
 <div className="flex items-center gap-3 px-5 py-3 min-h-[52px]">
-{/* AgentIcon */}
-<AnimatePresence mode="popLayout">
-{active ? (
-<AgentIcon key={active.agent} agent={active.agent} size={22} />
-) : null}
-</AnimatePresence>
+{prioritySession ? (
+<>
+  {/* AgentIcon of priority session */}
+  <AnimatePresence mode="popLayout">
+    <AgentIcon key={prioritySession.agent} agent={prioritySession.agent} size={22} />
+  </AnimatePresence>
 
-{/* PhaseDot */}
-<div className="flex-shrink-0">
-<PhaseDot phase={active ? active.phase : connected ? "completed" : "failed"} />
+  {/* PhaseDot */}
+  <div className="flex-shrink-0">
+    <PhaseDot phase={prioritySession.phase} />
+  </div>
+
+  {/* Agent Info */}
+  <div className="flex items-center gap-2 overflow-hidden min-w-0">
+    <motion.span
+      layout
+      className="text-[13px] font-semibold text-white/90 whitespace-nowrap"
+    >
+      {getAgentDisplayName(prioritySession.agent)}
+    </motion.span>
+
+    <AnimatePresence mode="wait">
+      <motion.span
+        key={prioritySession.phase}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -6 }}
+        transition={{ duration: 0.2 }}
+        className="text-[11px] text-white/35 font-medium whitespace-nowrap"
+      >
+        — {phaseLabel}
+      </motion.span>
+    </AnimatePresence>
+  </div>
+
+  <div className="flex-1" />
+
+  {/* Extra count badge */}
+  {extraCount > 0 && (
+    <span className="text-[10px] font-semibold text-white/50 whitespace-nowrap px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08]">
+      +{extraCount}
+    </span>
+  )}
+
+  {/* Permission/Question badge */}
+  <AnimatePresence>
+    {(hasAnyPermission || hasAnyQuestion) && (
+      <motion.div
+        key="alert-badge"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0, opacity: 0 }}
+        transition={{ type: "spring", stiffness: 500, damping: 15 }}
+        className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center shrink-0"
+      >
+        <span className="text-[9px] font-bold text-black leading-none">!</span>
+      </motion.div>
+    )}
+  </AnimatePresence>
+</>
+) : (
+<>
+  {/* PhaseDot */}
+  <div className="flex-shrink-0">
+    <PhaseDot phase={connected ? "completed" : "failed"} />
+  </div>
+
+  <motion.span className="text-[13px] font-semibold text-white/90 whitespace-nowrap">
+    Orbitos Island
+  </motion.span>
+
+  {!connected && (
+    <span className="text-[11px] text-white/35 font-medium">— Offline</span>
+  )}
+</>
+)}
 </div>
 
-{/* Agent Info */}
-<div className="flex items-center gap-2 overflow-hidden min-w-0">
-<motion.span
-layout
-className="text-[13px] font-semibold text-white/90 whitespace-nowrap"
->
-{active ? getAgentDisplayName(active.agent) : "Orbitos Island"}
-</motion.span>
-
-{extraCount > 0 && (
-<span className="text-[10px] font-semibold text-white/40 whitespace-nowrap">
-+{extraCount}
-</span>
-)}
-
-<AnimatePresence mode="wait">
-<motion.span
-key={active ? active.phase : connected ? "idle" : "offline"}
-initial={{ opacity: 0, y: 6 }}
-animate={{ opacity: 1, y: 0 }}
-exit={{ opacity: 0, y: -6 }}
-transition={{ duration: 0.2 }}
-className="text-[11px] text-white/35 font-medium whitespace-nowrap"
->
-— {phaseLabel}
-</motion.span>
-</AnimatePresence>
-</div>
-
-<div className="flex-1" />
-
-{/* TokenBars */}
-{active && (
-<AnimatePresence>
-<TokenBars
-key={`tb-${active.id}`}
-tokensConsumed={active.tokens_input + active.tokens_output}
-model={active.model}
-/>
-</AnimatePresence>
-)}
-
-{/* PermissionBadge */}
-<AnimatePresence>
-{(hasPermission || hasQuestion) && (
-<motion.div
-key="perm-badge"
-initial={{ scale: 0, opacity: 0 }}
-animate={{ scale: 1, opacity: 1 }}
-exit={{ scale: 0, opacity: 0 }}
-transition={{ type: "spring", stiffness: 500, damping: 15 }}
-className="w-4 h-4 rounded-full bg-amber-500 flex items-center justify-center shrink-0"
->
-<span className="text-[9px] font-bold text-black leading-none">!</span>
-</motion.div>
-)}
-</AnimatePresence>
-</div>
-
-{/* ── Dashboard extension (Large mode) ── */}
+{/* ── Dashboard extension (Cockpit mode) ── */}
 <AnimatePresence>
 {isExpanded && <Dashboard embedded />}
 </AnimatePresence>
@@ -440,111 +486,159 @@ exit={{ height: 0, opacity: 0 }}
 transition={{ duration: 0.2, ease: "easeInOut" }}
 className="overflow-hidden border-t border-white/[0.06]"
 >
-<div className="px-5 py-4 space-y-4">
-{active ? (
-<>
-{active.phase === "waiting_permission" && (
-<div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
-<span className="text-amber-400 text-[11px] mt-0.5 shrink-0">!</span>
-<p className="text-[11px] text-amber-300/90 font-medium">
-Waiting for permission to continue
-</p>
-</div>
-)}
-{active.phase === "waiting_question" && (
-<div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
-<span className="text-blue-400 text-[11px] mt-0.5 shrink-0">?</span>
-<p className="text-[11px] text-blue-300/90 font-medium">
-Agent needs your input
-</p>
-</div>
-)}
+{activeSessions.length > 0 ? (
+<div className="px-4 py-3 space-y-1">
+  <div className="flex items-center justify-between mb-2 px-1">
+    <span className="text-[10px] font-bold text-white/30 uppercase tracking-[0.1em]">
+      Active Sessions ({activeSessions.length})
+    </span>
+  </div>
 
-<div className="space-y-1">
-<p className="text-[11px] text-white/30 uppercase tracking-[0.1em] font-bold">
-Current Task
-</p>
-<p className="text-[12px] font-mono text-white/75 line-clamp-2 leading-relaxed">
-{(active as any).current_action
-? (active as any).current_action
-: active.cwd
-? `Working in ${active.cwd.split("/").pop()}/`
-: "Processing\u2026"}
-</p>
-</div>
+  <div className="space-y-0.5 max-h-[360px] overflow-y-auto custom-scrollbar">
+    {activeSessions.map((s) => (
+      <button
+        key={s.id}
+        onClick={() => handleSessionClick(s)}
+        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
+          hover:bg-white/[0.04] active:bg-white/[0.06] transition-all text-left group"
+      >
+        {/* Agent badge + phase dot */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div
+            className="w-5 h-5 rounded flex items-center justify-center shrink-0"
+            style={{
+              backgroundColor: `${getAgentColor(s.agent)}33`,
+              borderColor: `${getAgentColor(s.agent)}55`,
+              borderWidth: 1,
+            }}
+          >
+            <span
+              className="font-bold leading-none text-[9px]"
+              style={{ color: getAgentColor(s.agent) }}
+            >
+              {getAgentDisplayName(s.agent).charAt(0)}
+            </span>
+          </div>
+          <PhaseDot phase={s.phase} />
+        </div>
 
-<div className="flex items-center gap-6 pt-1 font-mono">
-<div className="space-y-0.5">
-<p className="text-[9px] text-white/20 uppercase">Tokens</p>
-<p className="text-[11px] text-white/60 tabular-nums">
-<AnimatedNumber value={active.tokens_input + active.tokens_output} />
-</p>
-</div>
-<div className="space-y-0.5">
-<p className="text-[9px] text-white/20 uppercase">Duration</p>
-<p className="text-[11px] text-white/60">
-{(active.duration_ms / 1000).toFixed(1)}s
-</p>
-</div>
-{active.model && (
-<div className="space-y-0.5">
-<p className="text-[9px] text-white/20 uppercase">Model</p>
-<p className="text-[11px] text-white/60">
-{active.model.split("-").pop()}
-</p>
-</div>
-)}
-{(active as any).pid && (
-<div className="space-y-0.5">
-<p className="text-[9px] text-white/20 uppercase">PID</p>
-<p className="text-[11px] text-white/40 tabular-nums" title="OS process — tracked by Orbitos watcher">
-{(active as any).pid}
-</p>
-</div>
-)}
-</div>
+        {/* Task info */}
+        <div className="flex-1 min-w-0 text-left">
+          <p className="text-[12px] text-white/80 font-medium truncate leading-tight">
+            {(s as any).current_action
+              ? (s as any).current_action
+              : s.cwd
+              ? s.cwd.split("/").pop()
+              : getAgentDisplayName(s.agent)}
+          </p>
+          <div className="flex items-center gap-2 mt-0.5">
+            {s.cwd && (
+              <span className="text-[10px] text-white/30 truncate max-w-[120px] font-mono">
+                {s.cwd.split("/").slice(-2).join("/")}
+              </span>
+            )}
+            <span className="text-[10px] text-white/20 font-mono tabular-nums">
+              {(s.duration_ms / 1000).toFixed(1)}s
+            </span>
+            <TerminalBadge terminal={s.terminal} />
+          </div>
+        </div>
 
-<div className="flex gap-2 pt-2">
-<button
-onClick={() => setExpanded(true)}
-className="flex-1 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-[11px] font-semibold text-white/70 transition-all border border-white/[0.06]"
->
-Open Cockpit
-</button>
-<button
-onClick={() => {
-if (!active) return;
-safeInvoke("stop_agent", { sessionId: active.id });
-}}
-className="flex-1 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-[11px] font-semibold text-white/30 hover:text-red-400 transition-all border border-white/[0.06]"
->
-Stop
-</button>
+        {/* Permission/question badge */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          {s.permission && (
+            <span className="w-3.5 h-3.5 rounded-full bg-amber-500 flex items-center justify-center text-[7px] font-bold text-black">
+              !
+            </span>
+          )}
+          {s.question && (
+            <span className="w-3.5 h-3.5 rounded-full bg-blue-500 flex items-center justify-center text-[7px] font-bold text-black">
+              ?
+            </span>
+          )}
+          <svg
+            className="w-3 h-3 text-white/20 group-hover:text-white/40 transition-colors"
+            fill="none" viewBox="0 0 24 24" stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </button>
+    ))}
+  </div>
+
+  {/* Bottom actions */}
+  <div className="flex gap-2 pt-3 border-t border-white/[0.06] mt-2">
+    <button
+      onClick={() => setExpanded(true)}
+      className="flex-1 px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-[11px] font-semibold text-white/70 transition-all border border-white/[0.06]"
+    >
+      Open Cockpit
+    </button>
+    <div className="relative">
+      <button
+        onClick={() => setStopAllConfirm(!stopAllConfirm)}
+        className="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 active:scale-[0.98] text-[11px] font-semibold text-white/30 hover:text-red-400 transition-all border border-white/[0.06]"
+      >
+        Stop All
+      </button>
+      <AnimatePresence>
+        {stopAllConfirm && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: -4 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: -4 }}
+            transition={{ duration: 0.15 }}
+            className="absolute bottom-full right-0 mb-2 w-64 p-4 rounded-xl bg-[#1a1a1e] border border-white/[0.08] shadow-2xl z-50"
+          >
+            <p className="text-[12px] font-semibold text-white/90 mb-1">
+              Stop all {activeSessions.length} agents?
+            </p>
+            <p className="text-[10px] text-white/40 leading-relaxed mb-4">
+              This will terminate {activeSessions.map(s => getAgentDisplayName(s.agent)).join(", ")} sessions.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setStopAllConfirm(false)}
+                className="flex-1 px-3 py-2 rounded-lg text-[11px] font-medium text-white/50 bg-white/[0.03] hover:bg-white/[0.06] border border-white/[0.06] transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleStopAll}
+                className="flex-1 px-3 py-2 rounded-lg text-[11px] font-semibold text-white bg-red-500/80 hover:bg-red-500 border border-red-500/30 transition-all"
+              >
+                Stop
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  </div>
 </div>
-</>
 ) : (
-<div className="flex flex-col items-center py-4 space-y-3">
-<div className="relative flex items-center justify-center">
-<div className="w-10 h-10 rounded-full border-2 border-dashed border-white/10" />
-<div
-className="absolute w-2.5 h-2.5 rounded-full"
-style={{
-backgroundColor: connected ? "#22c55e" : "#ef4444",
-}}
-/>
-</div>
-<p className="text-[12px] text-white/40 italic">
-{connected ? "Ready \u2014 no active sessions" : "Daemon offline"}
-</p>
-<button
-onClick={() => setExpanded(true)}
-className="px-6 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-[11px] font-semibold text-white/70 transition-all border border-white/[0.06]"
->
-View History
-</button>
+<div className="flex flex-col items-center py-6 space-y-3">
+  <div className="relative flex items-center justify-center">
+    <div className="w-10 h-10 rounded-full border-2 border-dashed border-white/10" />
+    <div
+      className="absolute w-2.5 h-2.5 rounded-full"
+      style={{
+        backgroundColor: connected ? "#22c55e" : "#ef4444",
+      }}
+    />
+  </div>
+  <p className="text-[12px] text-white/40 italic">
+    {connected ? "Ready — no active sessions" : "Daemon offline"}
+  </p>
+  <button
+    onClick={() => setExpanded(true)}
+    className="px-6 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-[11px] font-semibold text-white/70 transition-all border border-white/[0.06]"
+  >
+    View History
+  </button>
 </div>
 )}
-</div>
 </motion.div>
 )}
 </AnimatePresence>

@@ -184,6 +184,7 @@ mod tests {
             plan: None,
             diff: None,
             error: error.map(String::from),
+            current_action: None,
             metadata: None,
             pid: None,
             timestamp: chrono::Utc::now(),

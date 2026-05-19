@@ -26,6 +26,7 @@ pub struct AgentSession {
     pub plan: Option<PlanProposal>,
     pub diff: Option<DiffPayload>,
     pub error: Option<String>,
+    pub current_action: Option<String>,
     pub metadata: Option<serde_json::Value>,
     /// OS process ID provided by the shell wrapper — used by the process watcher.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -56,6 +57,7 @@ impl AgentSession {
             plan: event.plan.clone(),
             diff: event.diff.clone(),
             error: None,
+            current_action: event.current_action.clone(),
             metadata: event.metadata.clone(),
             pid: event.pid,
             created_at: event.timestamp,
@@ -145,6 +147,7 @@ mod tests {
             plan: None,
             diff: None,
             error: None,
+            current_action: None,
             metadata: None,
             pid: None,
             timestamp: chrono::Utc::now(),
@@ -858,6 +861,9 @@ pub fn apply_event(mut state: SessionState, event: UniversalEvent) -> SessionSta
                 if let Some(cwd) = event.cwd {
                     session.cwd = Some(cwd);
                 }
+                if let Some(action) = event.current_action {
+                    session.current_action = Some(action);
+                }
                 if let Some(branch) = event.branch {
                     session.branch = Some(branch);
                 }
@@ -876,6 +882,9 @@ pub fn apply_event(mut state: SessionState, event: UniversalEvent) -> SessionSta
             session.permission = event.permission;
             session.updated_at = event.timestamp;
             session.last_heartbeat = event.timestamp;
+            if let Some(action) = event.current_action {
+                session.current_action = Some(action);
+            }
         }
         EventKind::QuestionAsked => {
             let session = state.sessions.entry(session_id).or_insert_with(|| {

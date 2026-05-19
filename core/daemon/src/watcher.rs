@@ -92,6 +92,7 @@ pub async fn start_process_watcher(state: Arc<DaemonState>) {
                     plan: None,
                     diff: None,
                     error: Some("process exited unexpectedly".to_string()),
+                    current_action: None,
                     metadata: None,
                     pid: None,
                     timestamp: chrono::Utc::now(),
@@ -154,6 +155,7 @@ mod tests {
             plan: None,
             diff: None,
             error: None,
+            current_action: None,
             metadata: None,
             pid: Some(u32::MAX),
             created_at: Utc::now(),
@@ -191,6 +193,7 @@ mod tests {
                     terminal: None, pane: None, permission: None, question: None,
                     jump_target: None, plan: None, diff: None,
                     error: Some("process exited unexpectedly".to_string()),
+                    current_action: None,
                     metadata: None, pid: None,
                     timestamp: Utc::now(),
                 });

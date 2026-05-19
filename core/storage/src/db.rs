@@ -64,6 +64,7 @@ impl Database {
                 pane TEXT,
                 metadata TEXT,
                 error TEXT,
+                current_action TEXT,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL,
                 last_heartbeat INTEGER NOT NULL,
@@ -89,14 +90,18 @@ impl Database {
         )?;
 
         // v2 migration: non-breaking — adds pid column for process watcher support.
-        // ALTER TABLE is idempotent via the duplicate column guard in SQLite (errors are ignored).
         let _ = self.conn.execute_batch(
             "ALTER TABLE sessions ADD COLUMN pid INTEGER;"
         );
 
+        // v3 migration: non-breaking — adds current_action column.
+        let _ = self.conn.execute_batch(
+            "ALTER TABLE sessions ADD COLUMN current_action TEXT;"
+        );
+
         self.conn.execute(
             "INSERT OR IGNORE INTO schema_version (version, applied_at) VALUES (?1, ?2)",
-            params![2, chrono::Utc::now().timestamp()],
+            params![3, chrono::Utc::now().timestamp()],
         )?;
 
         info!("database migrations applied successfully");
@@ -107,8 +112,8 @@ impl Database {
         let metadata = session.metadata.as_ref().map(|m| m.to_string());
 
         self.conn.execute(
-            "INSERT INTO sessions (id, agent, phase, cwd, branch, model, tokens_input, tokens_output, duration_ms, terminal, pane, metadata, error, pid, created_at, updated_at, last_heartbeat, event_count)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
+            "INSERT INTO sessions (id, agent, phase, cwd, branch, model, tokens_input, tokens_output, duration_ms, terminal, pane, metadata, error, current_action, pid, created_at, updated_at, last_heartbeat, event_count)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)
              ON CONFLICT(id) DO UPDATE SET
                 phase = excluded.phase,
                 cwd = excluded.cwd,
@@ -121,6 +126,7 @@ impl Database {
                 pane = excluded.pane,
                 metadata = excluded.metadata,
                 error = excluded.error,
+                current_action = excluded.current_action,
                 pid = excluded.pid,
                 updated_at = excluded.updated_at,
                 last_heartbeat = excluded.last_heartbeat,
@@ -139,6 +145,7 @@ impl Database {
                 session.pane,
                 metadata,
                 session.error,
+                session.current_action,
                 session.pid,
                 session.created_at.timestamp(),
                 session.updated_at.timestamp(),
@@ -166,10 +173,48 @@ impl Database {
         Ok(())
     }
 
+    pub fn get_session_by_id(&self, session_id: &str) -> Result<Option<StoredSession>, DbError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, agent, phase, cwd, branch, model, tokens_input, tokens_output, duration_ms,
+                    terminal, pane, metadata, error, current_action, pid, created_at, updated_at, last_heartbeat, event_count
+             FROM sessions WHERE id = ?1"
+        )?;
+
+        let mut rows = stmt.query_map(params![session_id], |row| {
+            Ok(StoredSession {
+                id: row.get(0)?,
+                agent: row.get(1)?,
+                phase: row.get(2)?,
+                cwd: row.get(3)?,
+                branch: row.get(4)?,
+                model: row.get(5)?,
+                tokens_input: row.get(6)?,
+                tokens_output: row.get(7)?,
+                duration_ms: row.get(8)?,
+                terminal: row.get(9)?,
+                pane: row.get(10)?,
+                metadata: row.get(11)?,
+                error: row.get(12)?,
+                current_action: row.get(13)?,
+                pid: row.get(14)?,
+                created_at: row.get(15)?,
+                updated_at: row.get(16)?,
+                last_heartbeat: row.get(17)?,
+                event_count: row.get(18)?,
+            })
+        })?;
+
+        match rows.next() {
+            Some(Ok(session)) => Ok(Some(session)),
+            Some(Err(e)) => Err(DbError::Sqlite(e)),
+            None => Ok(None),
+        }
+    }
+
     pub fn get_active_sessions(&self) -> Result<Vec<StoredSession>, DbError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, agent, phase, cwd, branch, model, tokens_input, tokens_output, duration_ms,
-                    terminal, pane, metadata, error, pid, created_at, updated_at, last_heartbeat, event_count
+                    terminal, pane, metadata, error, current_action, pid, created_at, updated_at, last_heartbeat, event_count
              FROM sessions
              WHERE phase IN ('running', 'waiting_permission', 'waiting_question', 'paused')
              ORDER BY updated_at DESC",
@@ -191,11 +236,12 @@ impl Database {
                     pane: row.get(10)?,
                     metadata: row.get(11)?,
                     error: row.get(12)?,
-                    pid: row.get(13)?,
-                    created_at: row.get(14)?,
-                    updated_at: row.get(15)?,
-                    last_heartbeat: row.get(16)?,
-                    event_count: row.get(17)?,
+                    current_action: row.get(13)?,
+                    pid: row.get(14)?,
+                    created_at: row.get(15)?,
+                    updated_at: row.get(16)?,
+                    last_heartbeat: row.get(17)?,
+                    event_count: row.get(18)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -206,7 +252,7 @@ impl Database {
     pub fn get_all_sessions(&self, limit: u32) -> Result<Vec<StoredSession>, DbError> {
         let mut stmt = self.conn.prepare(
             "SELECT id, agent, phase, cwd, branch, model, tokens_input, tokens_output, duration_ms,
-                    terminal, pane, metadata, error, pid, created_at, updated_at, last_heartbeat, event_count
+                    terminal, pane, metadata, error, current_action, pid, created_at, updated_at, last_heartbeat, event_count
              FROM sessions
              ORDER BY updated_at DESC
              LIMIT ?1",
@@ -228,11 +274,12 @@ impl Database {
                     pane: row.get(10)?,
                     metadata: row.get(11)?,
                     error: row.get(12)?,
-                    pid: row.get(13)?,
-                    created_at: row.get(14)?,
-                    updated_at: row.get(15)?,
-                    last_heartbeat: row.get(16)?,
-                    event_count: row.get(17)?,
+                    current_action: row.get(13)?,
+                    pid: row.get(14)?,
+                    created_at: row.get(15)?,
+                    updated_at: row.get(16)?,
+                    last_heartbeat: row.get(17)?,
+                    event_count: row.get(18)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -282,6 +329,7 @@ mod tests {
             plan: None,
             diff: None,
             error: None,
+            current_action: None,
             metadata: None,
             pid: None,
             created_at: chrono::Utc::now(),
@@ -368,6 +416,7 @@ mod tests {
             plan: None,
             diff: None,
             error: None,
+            current_action: None,
             metadata: None,
             pid: None,
             timestamp: chrono::Utc::now(),
@@ -455,6 +504,7 @@ mod tests {
             plan: None,
             diff: None,
             error: None,
+            current_action: None,
             metadata: None,
             pid: None,
             timestamp: chrono::Utc::now(),

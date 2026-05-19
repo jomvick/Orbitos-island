@@ -8,7 +8,7 @@ use agentos_ipc::{BridgeCodec, IpcCommand, IpcMessage, MAX_MESSAGE_SIZE};
 use agentos_storage::Database;
 use daemon_core::agents::AgentRegistry;
 use daemon_core::events::EventBus;
-use daemon_core::state::{apply_event, SessionState, UniversalEvent};
+use daemon_core::state::{apply_event, AgentSession, EventKind, SessionState, UniversalEvent};
 
 pub struct DaemonState {
     pub event_bus: EventBus,
@@ -59,6 +59,31 @@ impl DaemonState {
                 return;
             }
         };
+
+        // If this event is for a session we don't know about (and it's not
+        // a SessionStarted), try to restore it from the database first.
+        // If not found in DB either, create it implicitly from the event data.
+        if !matches!(event.event, EventKind::SessionStarted) {
+            let known = self.session_state.read().await.sessions.contains_key(&event.session_id);
+            if !known {
+                let restored = if let Some(ref db) = self.db {
+                    let guard = db.lock().await;
+                    match guard.get_session_by_id(&event.session_id) {
+                        Ok(Some(stored)) => stored.to_domain().ok(),
+                        _ => None,
+                    }
+                } else {
+                    None
+                };
+                let mut s = self.session_state.write().await;
+                if let Some(session) = restored {
+                    s.sessions.insert(session.id.clone(), session);
+                } else {
+                    let session = AgentSession::new(&event);
+                    s.sessions.insert(session.id.clone(), session);
+                }
+            }
+        }
 
         let arc_event = Arc::new(event);
         self.event_bus.publish(Arc::clone(&arc_event)).unwrap_or_else(|e| {

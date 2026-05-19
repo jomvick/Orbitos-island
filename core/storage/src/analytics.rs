@@ -143,7 +143,7 @@ impl Database {
         let pattern = format!("%{}%", query);
         let mut stmt = self.conn.prepare(
             "SELECT id, agent, phase, cwd, branch, model, tokens_input, tokens_output, duration_ms,
-                    terminal, pane, metadata, error, pid, created_at, updated_at, last_heartbeat, event_count
+                    terminal, pane, metadata, error, current_action, pid, created_at, updated_at, last_heartbeat, event_count
              FROM sessions
              WHERE agent LIKE ?1
                 OR id LIKE ?1
@@ -170,11 +170,12 @@ impl Database {
                     pane: row.get(10)?,
                     metadata: row.get(11)?,
                     error: row.get(12)?,
-                    pid: row.get(13)?,
-                    created_at: row.get(14)?,
-                    updated_at: row.get(15)?,
-                    last_heartbeat: row.get(16)?,
-                    event_count: row.get(17)?,
+                    current_action: row.get(13)?,
+                    pid: row.get(14)?,
+                    created_at: row.get(15)?,
+                    updated_at: row.get(16)?,
+                    last_heartbeat: row.get(17)?,
+                    event_count: row.get(18)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;

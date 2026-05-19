@@ -3,7 +3,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::agents::traits::{PluginError, PluginResult};
-use crate::state::{AgentKind, EventKind, PermissionRequest, QuestionPrompt, UniversalEvent};
+use crate::state::{AgentKind, EventKind, JumpTarget, PermissionRequest, QuestionPrompt, UniversalEvent};
 
 #[derive(Deserialize)]
 #[serde(untagged)]
@@ -24,6 +24,7 @@ pub enum BaseEvent {
         question: Option<BaseQuestion>,
         terminal: Option<String>,
         pane: Option<String>,
+        current_action: Option<String>,
         metadata: Option<serde_json::Value>,
         /// OS PID forwarded by shell wrapper
         pid: Option<u32>,
@@ -69,6 +70,7 @@ pub trait SimplePlugin {
                 question,
                 terminal,
                 pane,
+                current_action,
                 metadata,
                 pid,
             } => {
@@ -94,6 +96,21 @@ pub trait SimplePlugin {
                     created_at: Utc::now(),
                 });
 
+                let jump_target = if event_kind == EventKind::SessionStarted {
+                    terminal.as_ref().map(|term| JumpTarget {
+                        session_id: session_id
+                            .as_deref()
+                            .and_then(|s| Uuid::parse_str(s).ok())
+                            .unwrap_or_else(Uuid::new_v4),
+                        terminal: term.clone(),
+                        pane: pane.clone(),
+                        cwd: cwd.clone(),
+                        pid,
+                    })
+                } else {
+                    None
+                };
+
                 Ok(Some(UniversalEvent {
                     id: Uuid::new_v4(),
                     agent: self.agent_kind(),
@@ -107,9 +124,10 @@ pub trait SimplePlugin {
                     duration_ms,
                     terminal,
                     pane,
+                    current_action,
                     permission: permission_req,
                     question: question_prompt,
-                    jump_target: None,
+                    jump_target,
                     plan: None,
                     diff: None,
                     error,
