@@ -163,8 +163,12 @@ export function PlanDiffView({ sessions }: { sessions: AgentSession[] }) {
   );
 
   const diffs = useMemo(
-    () => sessions.filter((s): s is AgentSession & { diff: DiffPayload } => s.diff != null),
-    [sessions]
+    () =>
+      sessions.filter(
+        (s): s is AgentSession & { diff: DiffPayload } =>
+          s.diff != null || s.permission?.diff != null,
+      ),
+    [sessions],
   );
 
   return (
@@ -234,15 +238,18 @@ export function PlanDiffView({ sessions }: { sessions: AgentSession[] }) {
                 <p className="text-[12px] font-medium">No diffs available</p>
               </div>
             ) : (
-              diffs.map((session) =>
-                session.diff.files.map((file) => (
+              diffs.flatMap((session) => {
+                const diffFiles = session.diff?.files ?? [];
+                const permDiffFiles = session.permission?.diff?.files ?? [];
+                const allFiles = [...diffFiles, ...permDiffFiles];
+                return allFiles.map((file, idx) => (
                   <DiffFileCard
-                    key={session.diff.id + file.file_path}
+                    key={session.id + "-file-" + idx}
                     file={file}
                     agentColor={getAgentColor(session.agent)}
                   />
-                ))
-              )
+                ));
+              })
             )}
           </motion.div>
         )}

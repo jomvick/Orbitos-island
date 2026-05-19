@@ -70,6 +70,23 @@ pub fn focus_pane(pane_id: &str) -> Result<(), ZellijError> {
     Ok(())
 }
 
+/// Get the zellij session name, tab index, and pane index for the given PID.
+pub fn locate_pane(pid: u32) -> Option<(String, u32, u32)> {
+    let panes = list_panes().ok()?;
+    let pane = panes.into_iter().find(|p| p.pid == Some(pid))?;
+    let session = pane.session?;
+    let pane_id_str = pane.pane_id?;
+    // zellij pane_id format: "tab_index:pane_index" (e.g. "0:1")
+    let parts: Vec<&str> = pane_id_str.split(':').collect();
+    if parts.len() == 2 {
+        let tab: u32 = parts[0].parse().ok()?;
+        let pane_num: u32 = parts[1].parse().ok()?;
+        Some((session, tab, pane_num))
+    } else {
+        None
+    }
+}
+
 pub fn is_in_zellij() -> bool {
     std::env::var("ZELLIJ").is_ok()
 }

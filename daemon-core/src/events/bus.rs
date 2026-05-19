@@ -75,6 +75,7 @@ mod tests {
             current_action: None,
             metadata: None,
             pid: None,
+            ppid: None,
             timestamp: chrono::Utc::now(),
         })
     }

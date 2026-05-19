@@ -141,6 +141,14 @@ pub struct PermissionRequest {
     pub context: Option<String>,
     pub created_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
+    pub diff: Option<DiffPayload>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum PermissionAction {
+    Allow,
+    Deny,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -150,6 +158,18 @@ pub struct QuestionPrompt {
     pub options: Vec<String>,
     pub context: Option<String>,
     pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct QuestionAnswer {
+    pub index: u32,
+    pub label: String,
+}
+
+impl Default for QuestionAnswer {
+    fn default() -> Self {
+        Self { index: 1, label: "default".into() }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -232,6 +252,10 @@ pub struct UniversalEvent {
     /// Used by the process watcher to detect crashed/killed sessions.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
+    /// Parent process ID of the hook binary — used for terminal detection via
+    /// process tree walking at SessionStart.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ppid: Option<u32>,
     pub timestamp: DateTime<Utc>,
 }
 

@@ -95,6 +95,7 @@ pub async fn start_process_watcher(state: Arc<DaemonState>) {
                     current_action: None,
                     metadata: None,
                     pid: None,
+                    ppid: None,
                     timestamp: chrono::Utc::now(),
                 });
 
@@ -158,6 +159,9 @@ mod tests {
             current_action: None,
             metadata: None,
             pid: Some(u32::MAX),
+            ppid: None,
+            terminal_kind: None,
+            terminal_id: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
             last_heartbeat: Utc::now(),
@@ -194,7 +198,7 @@ mod tests {
                     jump_target: None, plan: None, diff: None,
                     error: Some("process exited unexpectedly".to_string()),
                     current_action: None,
-                    metadata: None, pid: None,
+                    metadata: None, pid: None, ppid: None,
                     timestamp: Utc::now(),
                 });
                 let _ = state.event_bus.publish(Arc::clone(&synthetic));

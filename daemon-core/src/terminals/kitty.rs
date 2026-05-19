@@ -87,6 +87,19 @@ pub fn list_panes() -> Result<Vec<TerminalPane>, KittyError> {
     Ok(panes)
 }
 
+/// Find the kitty window ID that contains the process with the given PID.
+pub fn find_window_by_pid(pid: u32) -> Option<u32> {
+    let panes = list_panes().ok()?;
+    for pane in panes {
+        if let Some(pane_pid) = pane.pid {
+            if pane_pid == pid {
+                return pane.pane_id?.parse().ok();
+            }
+        }
+    }
+    None
+}
+
 pub fn focus_pane(pane_id: &str) -> Result<(), KittyError> {
     let status = Command::new("kitty")
         .args(["@", "focus-window", "--match", &format!("id:{}", pane_id)])

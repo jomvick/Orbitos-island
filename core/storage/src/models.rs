@@ -49,6 +49,9 @@ impl StoredSession {
                 .as_ref()
                 .and_then(|m| serde_json::from_str(m).ok()),
             pid: self.pid,
+            ppid: None,
+            terminal_kind: None,
+            terminal_id: None,
             created_at: chrono::DateTime::from_timestamp(self.created_at, 0).unwrap_or_default(),
             updated_at: chrono::DateTime::from_timestamp(self.updated_at, 0).unwrap_or_default(),
             last_heartbeat: chrono::DateTime::from_timestamp(self.last_heartbeat, 0)

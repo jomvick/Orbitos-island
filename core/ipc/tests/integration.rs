@@ -30,6 +30,7 @@ fn make_event() -> UniversalEvent {
         current_action: None,
         metadata: None,
         pid: None,
+        ppid: None,
         timestamp: Utc::now(),
     }
 }

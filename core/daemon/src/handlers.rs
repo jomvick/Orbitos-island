@@ -3,7 +3,7 @@ use tracing::{info, error};
 use uuid::Uuid;
 
 use agentos_ipc::{BridgeCodec, SessionFilter, IpcMessage};
-use daemon_core::state::AgentSession;
+use daemon_core::state::{AgentSession, QuestionAnswer};
 
 use crate::server::DaemonState;
 
@@ -172,49 +172,37 @@ pub async fn handle_search_sessions(codec: &mut BridgeCodec, id: Uuid, query: St
 
 pub async fn handle_jump_to_session(codec: &mut BridgeCodec, id: Uuid, session_id: String, state: &Arc<DaemonState>) {
     let session_state = state.session_state.read().await;
-    let session = session_state.sessions.get(&session_id);
+    let session = session_state.sessions.get(&session_id).cloned();
 
     match session {
         Some(s) => {
-            let terminal = s.terminal.as_deref();
-            let pid = s.jump_target.as_ref().and_then(|j| j.pid);
-            let cwd = s.jump_target.as_ref().and_then(|j| j.cwd.as_deref());
+            // Use the stored terminal_kind + terminal_id for direct jump.
+            // These were populated once at SessionStart by detect_terminal_from_pid.
+            let result = tokio::task::spawn_blocking(move || {
+                daemon_core::terminals::jumper::jump_to_terminal(
+                    &s.terminal_kind,
+                    &s.terminal_id,
+                )
+            })
+            .await
+            .map_err(|e| e.to_string())
+            .and_then(|r| r.map_err(|e| e.to_string()));
 
-            match daemon_core::terminals::detector::resolve_jump_target(terminal, pid, cwd)
-            {
-                Ok(Some(pane_id)) => {
-                    match daemon_core::terminals::detector::focus_terminal(
-                        &pane_id, terminal,
-                    ) {
-                        Ok(_) => {
-                            let _ = codec
-                                .send(&IpcMessage::new_response(
-                                    id,
-                                    Some(serde_json::json!({"pane_id": pane_id, "status": "focused"})),
-                                ))
-                                .await;
-                        }
-                        Err(e) => {
-                            let _ = codec
-                                .send(&IpcMessage::new_error(
-                                    id,
-                                    format!("focus failed: {}", e),
-                                ))
-                                .await;
-                        }
-                    }
-                }
-                Ok(None) => {
+            match result {
+                Ok(_) => {
                     let _ = codec
-                        .send(&IpcMessage::new_error(
+                        .send(&IpcMessage::new_response(
                             id,
-                            "terminal pane not found".to_string(),
+                            Some(serde_json::json!({"status": "focused"})),
                         ))
                         .await;
                 }
                 Err(e) => {
                     let _ = codec
-                        .send(&IpcMessage::new_error(id, format!("terminal error: {}", e)))
+                        .send(&IpcMessage::new_error(
+                            id,
+                            format!("focus failed: {}", e),
+                        ))
                         .await;
                 }
             }
@@ -246,6 +234,14 @@ pub async fn handle_resolve_permission(codec: &mut BridgeCodec, id: Uuid, permis
 
     match session_id {
         Some(sid) => {
+            use daemon_core::state::PermissionAction;
+            let action = if approved {
+                PermissionAction::Allow
+            } else {
+                PermissionAction::Deny
+            };
+
+            // 1. Publie l'event de résolution → Tauri frontend
             let event = daemon_core::state::UniversalEvent {
                 id: Uuid::new_v4(),
                 agent: daemon_core::state::AgentKind::Custom("agentos".into()),
@@ -271,6 +267,7 @@ pub async fn handle_resolve_permission(codec: &mut BridgeCodec, id: Uuid, permis
                     "approved": approved
                 })),
                 pid: None,
+                ppid: None,
                 timestamp: chrono::Utc::now(),
             };
 
@@ -286,6 +283,12 @@ pub async fn handle_resolve_permission(codec: &mut BridgeCodec, id: Uuid, permis
             let mut session_state = state.session_state.write().await;
             *session_state =
                 daemon_core::state::apply_event(session_state.clone(), (*arc_event).clone());
+
+            // 2. Débloque le hook qui attend ← nouveau
+            let mut pending = state.pending_hooks.lock().await;
+            if let Some(tx) = pending.remove(&permission_id) {
+                let _ = tx.send(action);
+            }
 
             let _ = codec
                 .send(&IpcMessage::new_response(
@@ -346,6 +349,7 @@ current_action: None,
                     "answer": answer
                 })),
                 pid: None,
+                ppid: None,
                 timestamp: chrono::Utc::now(),
             };
 
@@ -361,6 +365,24 @@ current_action: None,
             let mut session_state = state.session_state.write().await;
             *session_state =
                 daemon_core::state::apply_event(session_state.clone(), (*arc_event).clone());
+
+            // 2. Calcule l'index à partir des options stockées dans la session
+            let index = session_state
+                .sessions
+                .get(&sid)
+                .and_then(|s| s.question.as_ref())
+                .and_then(|q| q.options.iter().position(|o| o == &answer))
+                .map(|i| i as u32 + 1)
+                .unwrap_or(1);
+
+            // 3. Débloque le hook qui attend
+            let mut pending = state.pending_questions.lock().await;
+            if let Some(tx) = pending.remove(&question_id) {
+                let _ = tx.send(QuestionAnswer {
+                    index,
+                    label: answer,
+                });
+            }
 
             let _ = codec
                 .send(&IpcMessage::new_response(
@@ -410,11 +432,12 @@ pub async fn handle_stop_agent(codec: &mut BridgeCodec, id: Uuid, session_id: St
             metadata: Some(serde_json::json!({
                 "stopped_by": "user"
             })),
-            pid: None,
-            timestamp: chrono::Utc::now(),
-        };
+                pid: None,
+                ppid: None,
+                timestamp: chrono::Utc::now(),
+            };
 
-        let arc_event = Arc::new(event);
+            let arc_event = Arc::new(event);
         state
             .event_bus
             .publish(Arc::clone(&arc_event))

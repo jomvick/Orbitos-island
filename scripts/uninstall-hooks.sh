@@ -23,11 +23,22 @@ remove_claude_hooks() {
 
 remove_opencode_hooks() {
     local config_file="$OPENCODE_CONFIG_DIR/opencode.json"
+    local plugin_file="$OPENCODE_CONFIG_DIR/plugins/agentos.js"
+    local plugin_uri="file://$plugin_file"
+
+    if [ -f "$plugin_file" ]; then
+        rm "$plugin_file"
+        info "removed OpenCode CLI plugin file"
+    fi
+
     if [ -f "$config_file" ]; then
         local cleaned
-        cleaned=$(cat "$config_file" | jq 'del(.hooks)' 2>/dev/null || echo "{}")
+        cleaned=$(cat "$config_file" | jq \
+          --arg uri "$plugin_uri" \
+          'del(.hooks) | .plugin = ((.plugin // []) | map(select(. != $uri))) | if .plugin == [] then del(.plugin) else . end' \
+          2>/dev/null || echo "{}")
         echo "$cleaned" > "$config_file"
-        info "removed OpenCode hooks"
+        info "removed OpenCode hooks and plugin reference"
     fi
 }
 

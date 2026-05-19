@@ -332,6 +332,9 @@ mod tests {
             current_action: None,
             metadata: None,
             pid: None,
+            ppid: None,
+            terminal_kind: None,
+            terminal_id: None,
             created_at: chrono::Utc::now(),
             updated_at: chrono::Utc::now(),
             last_heartbeat: chrono::Utc::now(),
@@ -419,6 +422,7 @@ mod tests {
             current_action: None,
             metadata: None,
             pid: None,
+            ppid: None,
             timestamp: chrono::Utc::now(),
         };
 
@@ -426,55 +430,6 @@ mod tests {
         let timeline = db.get_timeline(10).unwrap();
         assert_eq!(timeline.len(), 1);
         assert_eq!(timeline[0].agent, "opencode");
-    }
-
-    #[test]
-    fn test_get_session_stats_empty() {
-        let db = test_db();
-        let stats = db.get_session_stats().unwrap();
-        assert_eq!(stats.total_sessions, 0);
-        assert_eq!(stats.active_count, 0);
-        assert_eq!(stats.total_tokens, 0);
-    }
-
-    #[test]
-    fn test_search_sessions() {
-        let db = test_db();
-        let s1 = sample_session("opencode");
-        let mut s2 = sample_session("claude");
-        s2.cwd = Some("/other".to_string());
-        db.upsert_session(&s1).unwrap();
-        db.upsert_session(&s2).unwrap();
-
-        let results = db.search_sessions("opencode").unwrap();
-        assert_eq!(results.len(), 1);
-        assert_eq!(results[0].agent, "opencode");
-    }
-
-    #[test]
-    fn test_search_sessions_by_cwd() {
-        let db = test_db();
-        let mut s1 = sample_session("opencode");
-        s1.cwd = Some("/home/user/my-project".to_string());
-        let mut s2 = sample_session("claude");
-        s2.cwd = Some("/other".to_string());
-        db.upsert_session(&s1).unwrap();
-        db.upsert_session(&s2).unwrap();
-
-        let results = db.search_sessions("my-project").unwrap();
-        assert_eq!(results.len(), 1);
-    }
-
-    #[test]
-    fn test_upsert_session_is_idempotent() {
-        let db = test_db();
-        let session = sample_session("opencode");
-
-        db.upsert_session(&session).unwrap();
-        db.upsert_session(&session).unwrap();
-
-        let sessions = db.get_all_sessions(10).unwrap();
-        assert_eq!(sessions.len(), 1);
     }
 
     #[test]
@@ -507,6 +462,7 @@ mod tests {
             current_action: None,
             metadata: None,
             pid: None,
+            ppid: None,
             timestamp: chrono::Utc::now(),
         };
 

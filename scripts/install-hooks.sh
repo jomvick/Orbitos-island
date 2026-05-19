@@ -61,37 +61,42 @@ HOOKJSON
     info "Claude Code hooks installed: $settings_file"
 }
 
-install_opencode_hooks() {
-    info "installing OpenCode hooks..."
+install_opencode_cli_plugin() {
+    info "installing OpenCode CLI plugin..."
+
+    local plugin_src
+    plugin_src="$(dirname "$0")/../plugins/opencode/js/agentos-cli-plugin.js"
+    if [ ! -f "$plugin_src" ]; then
+        warn "plugin source not found at $plugin_src"
+        warn "run install-opencode-plugin.sh instead"
+        return
+    fi
+
+    local plugin_dir="$OPENCODE_CONFIG_DIR/plugins"
+    local plugin_dest="$plugin_dir/agentos.js"
+    local config_file="$OPENCODE_CONFIG_DIR/opencode.json"
+
+    mkdir -p "$plugin_dir"
+    cp "$plugin_src" "$plugin_dest"
+    info "CLI plugin copied to $plugin_dest"
 
     mkdir -p "$OPENCODE_CONFIG_DIR"
 
-    local config_file="$OPENCODE_CONFIG_DIR/opencode.json"
-    local config
     if [ -f "$config_file" ]; then
         config=$(cat "$config_file")
     else
-        config='{"hooks":{}}'
+        config='{}'
     fi
 
-    local hook_entry
-    hook_entry=$(cat <<HOOKJSON
-{
-  "hooks": {
-    "preTask": "$AGENTOS_HOOK --source opencode --event",
-    "postTask": "$AGENTOS_HOOK --source opencode --event",
-    "onPermission": "$AGENTOS_HOOK --source opencode --event",
-    "onError": "$AGENTOS_HOOK --source opencode --event"
-  }
-}
-HOOKJSON
-)
-
+    local plugin_uri="file://$plugin_dest"
     local merged
-    merged=$(echo "$config" | jq -M --argjson hooks "$(echo "$hook_entry" | jq '.hooks')" '.hooks = $hooks' 2>/dev/null || echo "$hook_entry")
+    merged=$(echo "$config" | jq -M \
+      --arg uri "$plugin_uri" \
+      'del(.hooks) | .plugin = ((.plugin // []) | if index($uri) then . else . + [$uri] end)' \
+      2>/dev/null || echo "$config")
 
     echo "$merged" > "$config_file"
-    info "OpenCode hooks installed: $config_file"
+    info "OpenCode CLI plugin installed and registered: $config_file"
 }
 
 install_tmux_hook() {
@@ -133,7 +138,7 @@ main() {
 
     install_claude_hooks
     echo ""
-    install_opencode_hooks
+    install_opencode_cli_plugin
     echo ""
     install_tmux_hook
     echo ""

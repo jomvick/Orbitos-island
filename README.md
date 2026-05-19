@@ -17,7 +17,7 @@ Inspired by [Vibe Island](https://vibeisland.ai) and [Open Island](https://open-
 
 * **Ambient UI** — Compact floating bar shows live agent activity. Hover to expand. No context switch.
 * **Permission Overlay** — When an agent needs approval, a HUD pops up instantly. Approve or deny in one click.
-* **Terminal Jump** — One click to focus the exact tmux/zellij/kitty/ghostty/wezterm pane where your agent is running.
+* **Terminal Jump** — One click to focus the exact tmux/zellij/kitty/ghostty/wezterm/Konsole pane where your agent is running, with automatic X11/Wayland fallback.
 * **Session Timeline** — Full event history per agent: tokens, duration, model, errors.
 * **Command Palette** — Search sessions by agent, project, or command. Focus any session instantly.
 * **Analytics** — Token usage, session duration, cost estimates, agent activity graphs.
@@ -49,11 +49,16 @@ Adding a new agent? [Write a plugin →](docs/plugins.md)
 
 | Terminal | Jump to Session |
 |---|---|
-| tmux | ✅ |
-| zellij | ✅ |
-| Ghostty | ✅ |
-| WezTerm | ✅ |
-| Kitty | ✅ |
+| tmux | ✅ (session/window/pane via IPC) |
+| zellij | ✅ (session/tab/pane via IPC) |
+| Kitty | ✅ (window focus via `kitty @`) |
+| Ghostty | ✅ (pane focus via CLI) |
+| WezTerm | ✅ (pane focus via `wezterm cli`) |
+| Konsole | ✅ (via D-Bus) |
+
+**Fallback chain:** Terminal-specific IPC → X11 (`xdotool` → `wmctrl`) → Wayland (`swaymsg` → `qdbus` → `ydotool`)
+
+Jump detection uses process tree walking from the agent hook's parent PID through `/proc` to identify and store the exact terminal pane at session start — no re-detection on each jump.
 
 ---
 
@@ -81,8 +86,8 @@ agentos-hook  (ultra-light CLI hook, calls daemon)
 │  └──────────┘  └──────────┘         │
 │                    │                │
 │  ┌──────────┐  ┌──────────┐         │
-│  │Notificat.│  │Terminal  │         │
-│  │Dispatcher│  │Detector  │         │
+ │  │Notificat.│  │Terminal  │         │
+ │  │Dispatcher│  │Jump+Det  │         │
 │  └──────────┘  └──────────┘         │
 └────────────────┬─────────────────────┘
                  │ Unix Socket IPC
@@ -170,7 +175,7 @@ agentos/
 │   ├── events/             # Local EventBus broadcaster
 │   ├── state/              # Session state machines & transitions
 │   ├── notifications/      # Priority-based notification manager
-│   └── terminals/          # Terminal jumper modules (tmux, zellij)
+│   └── terminals/          # Terminal detection + jumper (tmux, kitty, Ghostty, WezTerm, zellij, Konsole, X11/Wayland fallback)
 │
 ├── core/
 │   ├── daemon/             # agentosd main binary crate
@@ -236,7 +241,7 @@ We have organized our pending roadmap and recent core analysis findings into **a
 ### Core Enhancements & Stability Issues:
 - [ ] [Global System-wide Shortcuts (Issue #12)](https://github.com/jomvick/Orbitos-island/issues/12) — Tauri global keyboard shortcuts to toggle the cockpit view instantly.
 - [ ] [Daemon Auto-Spawning & Watchdog (Issue #13)](https://github.com/jomvick/Orbitos-island/issues/13) — Automatically launch `agentosd` on app start and manage logging.
-- [ ] [Native kitty & Ghostty Focus Jump (Issue #14)](https://github.com/jomvick/Orbitos-island/issues/14) — Focus non-multiplexed terminal windows utilizing native remote interfaces.
+- [x] [Native Terminal Focus Jump (Issue #14)](https://github.com/jomvick/Orbitos-island/issues/14) — Process tree walk from hook PPID, precise pane targeting for tmux/zellij/kitty/Ghostty/WezTerm/Konsole, X11/Wayland fallback dispatcher.
 - [ ] [Wayland Layer-Shell Overlay Positioning (Issue #15)](https://github.com/jomvick/Orbitos-island/issues/15) — GTK layer-shell window bounds configurations for solid float on Wayland.
 - [ ] [API Token Pricing and Budget Thresholds (Issue #16)](https://github.com/jomvick/Orbitos-island/issues/16) — Multi-model price trackers and hard notifications when budgets are reached.
 

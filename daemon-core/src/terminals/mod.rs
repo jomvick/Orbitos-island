@@ -1,5 +1,6 @@
 pub mod detector;
 pub mod ghostty;
+pub mod jumper;
 pub mod kitty;
 pub mod tmux;
 pub mod wezterm;
@@ -7,6 +8,7 @@ pub mod zellij;
 pub mod konsole;
 
 pub use detector::*;
+pub use jumper::*;
 
 #[cfg(test)]
 mod tests {

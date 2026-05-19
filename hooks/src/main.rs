@@ -31,6 +31,20 @@ struct Cli {
     pid: Option<u32>,
 }
 
+fn get_parent_pid() -> u32 {
+    std::fs::read_to_string("/proc/self/status")
+        .ok()
+        .and_then(|s| {
+            s.lines()
+                .find(|l| l.starts_with("PPid:"))?
+                .split_whitespace()
+                .nth(1)?
+                .parse()
+                .ok()
+        })
+        .unwrap_or(0)
+}
+
 fn main() {
     let _ = tracing_subscriber::fmt()
         .with_target(false)
@@ -92,10 +106,54 @@ fn main() {
         }
     }
 
-    if let Err(e) = sender::send_event(&source, event_value) {
-        eprintln!("[agentos-hook] {}", e);
+    // Inject ppid (parent PID of this hook process) for terminal detection.
+    // The daemon walks the process tree from ppid upward to find the terminal multiplexer.
+    if let serde_json::Value::Object(ref mut map) = event_value {
+        let ppid = get_parent_pid();
+        if ppid != 0 {
+            map.insert("ppid".to_string(), serde_json::json!(ppid));
+        }
     }
 
-    std::process::exit(0);
+    // Détecte si c'est une demande de permission → bloque jusqu'à résolution
+    let is_permission = event_value
+        .get("type")
+        .and_then(|t| t.as_str())
+        .map(|t| t == "permission" || t.contains("permission"))
+        .unwrap_or(false);
+
+    // Détecte si c'est une question → bloque jusqu'à réponse
+    let is_question = event_value
+        .get("type")
+        .and_then(|t| t.as_str())
+        .map(|t| t == "question_asked" || t.contains("question"))
+        .unwrap_or(false);
+
+    if is_permission {
+        match sender::send_permission_request(&source, event_value) {
+            Ok(sender::PermissionAction::Allow) => std::process::exit(0),
+            Ok(sender::PermissionAction::Deny) => std::process::exit(1),
+            Err(e) => {
+                eprintln!("[agentos-hook] {}", e);
+                std::process::exit(0); // fail-open si daemon inaccessible
+            }
+        }
+    } else if is_question {
+        match sender::send_question_request(&source, event_value) {
+            Ok(answer) => {
+                println!("{}", answer);
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("[agentos-hook] {}", e);
+                std::process::exit(0);
+            }
+        }
+    } else {
+        if let Err(e) = sender::send_event(&source, event_value) {
+            eprintln!("[agentos-hook] {}", e);
+        }
+        std::process::exit(0);
+    }
 }
 

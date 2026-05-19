@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use tokio::sync::{Mutex, RwLock};
@@ -8,7 +9,10 @@ use agentos_ipc::{BridgeCodec, IpcCommand, IpcMessage, MAX_MESSAGE_SIZE};
 use agentos_storage::Database;
 use daemon_core::agents::AgentRegistry;
 use daemon_core::events::EventBus;
-use daemon_core::state::{apply_event, AgentSession, EventKind, SessionState, UniversalEvent};
+use daemon_core::state::{
+    apply_event, AgentSession, EventKind, PermissionAction, QuestionAnswer, SessionState,
+    UniversalEvent,
+};
 
 pub struct DaemonState {
     pub event_bus: EventBus,
@@ -16,6 +20,8 @@ pub struct DaemonState {
     pub plugin_registry: AgentRegistry,
     pub subscribers: RwLock<Vec<Uuid>>,
     pub db: Option<Arc<Mutex<Database>>>,
+    pub pending_hooks: Mutex<HashMap<Uuid, tokio::sync::oneshot::Sender<PermissionAction>>>,
+    pub pending_questions: Mutex<HashMap<Uuid, tokio::sync::oneshot::Sender<QuestionAnswer>>>,
 }
 
 impl DaemonState {
@@ -29,6 +35,8 @@ impl DaemonState {
             plugin_registry,
             subscribers: RwLock::new(Vec::new()),
             db,
+            pending_hooks: Mutex::new(HashMap::new()),
+            pending_questions: Mutex::new(HashMap::new()),
         }
     }
 
@@ -102,6 +110,143 @@ pub async fn handle_client(mut codec: BridgeCodec, state: Arc<DaemonState>) {
 
     info!(client = %client_id, "client connected");
 
+    // Read the first message to determine connection type.
+    let first_msg = match codec.recv().await {
+        Ok(msg) => msg,
+        Err(e) => {
+            debug!(client = %client_id, error = %e, "client disconnected");
+            return;
+        }
+    };
+
+    match first_msg {
+        IpcMessage::Event { source, payload, .. } => {
+            let is_permission = payload
+                .get("type")
+                .and_then(|t| t.as_str())
+                .map(|t| t == "permission" || t.contains("permission"))
+                .unwrap_or(false);
+
+            let is_question = payload
+                .get("type")
+                .and_then(|t| t.as_str())
+                .map(|t| t == "question_asked" || t.contains("question"))
+                .unwrap_or(false);
+
+            let question_session_id = if is_question {
+                payload.get("session_id").and_then(|v| v.as_str()).map(String::from)
+            } else {
+                None
+            };
+
+            state.process_event(&source, payload).await;
+
+            if is_permission {
+                // ── Pattern B Permission: bloquer jusqu'à résolution ──
+                let permission_id = {
+                    let ss = state.session_state.read().await;
+                    ss.sessions
+                        .values()
+                        .find(|s| {
+                            matches!(
+                                s.phase,
+                                daemon_core::state::SessionPhase::WaitingPermission
+                            )
+                        })
+                        .and_then(|s| s.permission.as_ref().map(|p| p.id))
+                };
+
+                if let Some(pid) = permission_id {
+                    let (tx, rx) = tokio::sync::oneshot::channel::<PermissionAction>();
+                    state.pending_hooks.lock().await.insert(pid, tx);
+
+                    let response = match tokio::time::timeout(
+                        std::time::Duration::from_secs(300),
+                        rx,
+                    )
+                    .await
+                    {
+                        Ok(Ok(PermissionAction::Allow)) => {
+                            serde_json::json!({"action": "allow"})
+                        }
+                        _ => serde_json::json!({"action": "deny", "reason": "timeout"}),
+                    };
+
+                    let _ = codec
+                        .send(&IpcMessage::new_response(
+                            Uuid::new_v4(),
+                            Some(response),
+                        ))
+                        .await;
+                }
+
+                info!(client = %client_id, "permission hook disconnected");
+                return;
+            }
+
+            if is_question {
+                let question_id = match question_session_id.as_ref() {
+                    Some(sid) => {
+                        let ss = state.session_state.read().await;
+                        ss.sessions.get(sid).and_then(|s| {
+                            if matches!(
+                                s.phase,
+                                daemon_core::state::SessionPhase::WaitingQuestion
+                            ) {
+                                s.question.as_ref().map(|q| q.id)
+                            } else {
+                                None
+                            }
+                        })
+                    }
+                    None => None,
+                };
+
+                if let Some(qid) = question_id {
+                    let (tx, rx) =
+                        tokio::sync::oneshot::channel::<QuestionAnswer>();
+                    state.pending_questions.lock().await.insert(qid, tx);
+
+                    let response = match tokio::time::timeout(
+                        std::time::Duration::from_secs(300),
+                        rx,
+                    )
+                    .await
+                    {
+                        Ok(Ok(answer)) => serde_json::json!({
+                            "selected_index": answer.index,
+                            "label": answer.label,
+                        }),
+                        _ => serde_json::json!({
+                            "selected_index": 1,
+                            "label": "timeout_default",
+                        }),
+                    };
+
+                    let _ = codec
+                        .send(&IpcMessage::new_response(
+                            Uuid::new_v4(),
+                            Some(response),
+                        ))
+                        .await;
+                }
+
+                info!(client = %client_id, "question hook disconnected");
+                return;
+            }
+        }
+        IpcMessage::Command { id, command, .. } => {
+            handle_command(&mut codec, id, command, &state).await;
+        }
+        IpcMessage::Subscribe { .. } => {
+            let mut subs = state.subscribers.write().await;
+            subs.push(client_id);
+            info!(client = %client_id, "client subscribed");
+        }
+        _ => {}
+    }
+
+    // ── Boucle normale pour les connexions persistantes (Tauri) ──
     loop {
         tokio::select! {
             msg = codec.recv() => {

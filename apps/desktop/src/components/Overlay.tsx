@@ -41,7 +41,10 @@ export function Overlay() {
 
   const color = getAgentColor(pendingOverlay.agent);
   const name = getAgentDisplayName(pendingOverlay.agent);
-  const hasPlansOrDiffs = pendingOverlay.plan != null || pendingOverlay.diff != null;
+  const hasPlansOrDiffs =
+    pendingOverlay.plan != null ||
+    pendingOverlay.diff != null ||
+    pendingOverlay.permission?.diff != null;
 
   const handleApprove = async () => {
     if (!pendingOverlay.permission) return;
@@ -159,6 +162,20 @@ export function Overlay() {
                     <div className="bg-black/20 rounded-xl p-4 border border-white/5 font-mono text-[12px] text-accent-blue/70 overflow-x-auto custom-scrollbar">
                       {pendingOverlay.permission.command}
                     </div>
+                    {pendingOverlay.permission.diff && (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-accent-blue/5 border border-accent-blue/10">
+                        <span className="text-[11px] text-accent-blue/70">
+                          {pendingOverlay.permission.diff.files.length} file{pendingOverlay.permission.diff.files.length > 1 ? "s" : ""} changed
+                        </span>
+                        <span className="text-white/20">·</span>
+                        <button
+                          onClick={() => switchTab("review")}
+                          className="text-[11px] text-accent-blue underline hover:text-accent-blue/80 transition-colors"
+                        >
+                          Review changes
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

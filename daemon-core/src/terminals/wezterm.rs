@@ -62,6 +62,19 @@ pub fn list_panes() -> Result<Vec<TerminalPane>, WeztermError> {
     Ok(result)
 }
 
+/// Find the wezterm pane ID that contains the process with the given PID.
+pub fn find_pane_id_by_pid(pid: u32) -> Option<u32> {
+    let panes = list_panes().ok()?;
+    for pane in panes {
+        if let Some(pane_pid) = pane.pid {
+            if pane_pid == pid {
+                return pane.pane_id?.parse().ok();
+            }
+        }
+    }
+    None
+}
+
 pub fn focus_pane(pane_id: &str) -> Result<(), WeztermError> {
     let status = Command::new("wezterm")
         .args(["cli", "activate-pane", "--pane-id", pane_id])

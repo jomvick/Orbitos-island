@@ -1,6 +1,23 @@
 import type { AgentKind } from "./agents";
 import type { SessionPhase } from "./events";
 
+export type TerminalKind =
+  | "Tmux"
+  | "Zellij"
+  | "Ghostty"
+  | "WezTerm"
+  | "Kitty"
+  | "Konsole"
+  | "Unknown";
+
+export type TerminalId =
+  | { TmuxWindow: { session: string; window: number; pane: number } }
+  | { ZellijPane: { session: string; tab: number; pane: number } }
+  | { Kitty: { window_id: number } }
+  | { WezTerm: { pane_id: number } }
+  | { Ghostty: { pid: number } }
+  | { Pid: { pid: number } };
+
 export interface JumpTarget {
   session_id: string;
   terminal: string;
@@ -16,6 +33,7 @@ export interface PermissionRequest {
   context?: string;
   created_at: string;
   expires_at: string;
+  diff?: DiffPayload;
 }
 
 export interface QuestionPrompt {
@@ -75,6 +93,10 @@ export interface AgentSession {
   error?: string;
   current_action?: string;
   metadata?: Record<string, unknown>;
+  pid?: number;
+  ppid?: number;
+  terminal_kind?: TerminalKind;
+  terminal_id?: TerminalId;
   created_at: string;
   updated_at: string;
   last_heartbeat: string;
@@ -102,5 +124,7 @@ export interface UniversalEvent {
   error?: string;
   current_action?: string;
   metadata?: Record<string, unknown>;
+  pid?: number;
+  ppid?: number;
   timestamp: string;
 }

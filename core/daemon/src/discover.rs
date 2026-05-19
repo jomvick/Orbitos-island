@@ -167,27 +167,13 @@ fn install_claude_hooks(_cfg: &AgentConfig) -> Result<bool, String> {
 
 fn install_opencode_hooks(_cfg: &AgentConfig) -> Result<bool, String> {
     let config_path = expand_home("~/.config/opencode/opencode.json");
-    let plugin_src = find_plugin_js_path();
+    let plugin_src = find_cli_plugin_js_path();
 
     let mut config: serde_json::Value = if config_path.exists() {
         read_json_file(&config_path)?
     } else {
         serde_json::json!({})
     };
-
-    let hook_binary = find_binary("agentos-hook")
-        .unwrap_or_else(|| "agentos-hook".to_string());
-
-    let hooks = serde_json::json!({
-        "preTask": format!("{} --source opencode --event", hook_binary),
-        "postTask": format!("{} --source opencode --event", hook_binary),
-        "onPermission": format!("{} --source opencode --event", hook_binary),
-        "onError": format!("{} --source opencode --event", hook_binary)
-    });
-
-    config["hooks"] = hooks;
-    write_json_file(&config_path, &config)?;
-    info!(path = %config_path.display(), "opencode hooks installed");
 
     if let Some(src) = plugin_src {
         let plugin_dir = expand_home("~/.config/opencode/plugins");
@@ -196,7 +182,7 @@ fn install_opencode_hooks(_cfg: &AgentConfig) -> Result<bool, String> {
             .map_err(|e| format!("cannot create plugin dir: {}", e))?;
         std::fs::copy(&src, &plugin_dest)
             .map_err(|e| format!("cannot copy plugin: {}", e))?;
-        info!(from = %src.display(), to = %plugin_dest.display(), "opencode JS plugin installed");
+        info!(from = %src.display(), to = %plugin_dest.display(), "opencode CLI plugin installed");
 
         let plugin_uri = format!("file://{}", plugin_dest.display());
         let plugins = config["plugin"]
@@ -209,25 +195,28 @@ fn install_opencode_hooks(_cfg: &AgentConfig) -> Result<bool, String> {
 
         if plugins.is_none() {
             config["plugin"] = serde_json::json!([plugin_uri]);
-            write_json_file(&config_path, &config)?;
         }
+
+        write_json_file(&config_path, &config)?;
+    } else {
+        warn!("opencode CLI plugin source not found — plugin install skipped");
     }
 
     Ok(true)
 }
 
-fn find_plugin_js_path() -> Option<PathBuf> {
+fn find_cli_plugin_js_path() -> Option<PathBuf> {
     let candidates = [
-        PathBuf::from("plugins/opencode/js/agentos-opencode.js"),
-        PathBuf::from("../plugins/opencode/js/agentos-opencode.js"),
+        PathBuf::from("plugins/opencode/js/agentos-cli-plugin.js"),
+        PathBuf::from("../plugins/opencode/js/agentos-cli-plugin.js"),
         expand_home("~/.config/opencode/plugins/agentos.js"),
     ];
     let exe_dir = std::env::current_exe().ok()?;
     let exe_parent = exe_dir.parent()?;
 
     let relative = [
-        exe_parent.join("plugins/opencode/js/agentos-opencode.js"),
-        exe_parent.join("../plugins/opencode/js/agentos-opencode.js"),
+        exe_parent.join("plugins/opencode/js/agentos-cli-plugin.js"),
+        exe_parent.join("../plugins/opencode/js/agentos-cli-plugin.js"),
     ];
 
     for path in candidates.iter().chain(relative.iter()) {

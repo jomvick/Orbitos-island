@@ -109,6 +109,70 @@ pub fn send_keys(pane_id: &str, keys: &str) -> Result<(), TmuxError> {
     Ok(())
 }
 
+/// Get the tmux session name, window index, and pane index for the process tree rooted at `pid`.
+pub fn locate_pane(pid: u32) -> Option<(String, u32, u32)> {
+    let output = Command::new("tmux")
+        .args([
+            "list-panes",
+            "-a",
+            "-F",
+            "#{pane_pid}|#{session_name}|#{window_index}|#{pane_index}",
+        ])
+        .output()
+        .ok()?;
+
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8(output.stdout).ok()?;
+    for line in stdout.lines() {
+        if line.is_empty() {
+            continue;
+        }
+        let parts: Vec<&str> = line.split('|').collect();
+        if parts.len() == 4 {
+            let pane_pid: u32 = parts[0].parse().ok()?;
+            if is_descendant(pane_pid, pid) {
+                return Some((
+                    parts[1].to_string(),
+                    parts[2].parse().ok()?,
+                    parts[3].parse().ok()?,
+                ));
+            }
+        }
+    }
+    None
+}
+
+/// Check if `descendant` is a child (or deeper) of `ancestor` in the process tree.
+fn is_descendant(ancestor: u32, descendant: u32) -> bool {
+    let mut current = descendant;
+    loop {
+        if current == ancestor {
+            return true;
+        }
+        let path = format!("/proc/{current}/status");
+        let status = match std::fs::read_to_string(&path) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+        let ppid: u32 = match status
+            .lines()
+            .find(|l| l.starts_with("PPid:"))
+            .and_then(|l| l.split_whitespace().nth(1))
+            .and_then(|s| s.parse().ok())
+        {
+            Some(p) => p,
+            None => return false,
+        };
+        if ppid == 0 || ppid == 1 {
+            return false;
+        }
+        current = ppid;
+    }
+}
+
 pub fn current_pane_id() -> Result<Option<String>, TmuxError> {
     let output = Command::new("tmux")
         .args(["display-message", "-p", "#{pane_id}"])

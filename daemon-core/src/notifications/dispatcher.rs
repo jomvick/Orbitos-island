@@ -170,6 +170,7 @@ mod tests {
                 command: "test command".to_string(),
                 description: "test description".to_string(),
                 context: None,
+                diff: None,
                 created_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
                 expires_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 5, 0).unwrap(),
             }),
@@ -187,6 +188,7 @@ mod tests {
             current_action: None,
             metadata: None,
             pid: None,
+            ppid: None,
             timestamp: chrono::Utc::now(),
         }
     }

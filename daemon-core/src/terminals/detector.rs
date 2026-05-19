@@ -16,6 +16,32 @@ pub struct TerminalPane {
     pub session: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TerminalId {
+    TmuxWindow {
+        session: String,
+        window: u32,
+        pane: u32,
+    },
+    ZellijPane {
+        session: String,
+        tab: u32,
+        pane: u32,
+    },
+    Kitty {
+        window_id: u32,
+    },
+    WezTerm {
+        pane_id: u32,
+    },
+    Ghostty {
+        pid: u32,
+    },
+    Pid {
+        pid: u32,
+    },
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum TerminalKind {
     Tmux,
@@ -24,6 +50,7 @@ pub enum TerminalKind {
     WezTerm,
     Kitty,
     Konsole,
+    Unknown,
     Other(String),
 }
 
@@ -141,6 +168,7 @@ pub fn resolve_jump_target(
             });
             Ok(pane.and_then(|p| p.pane_id))
         }
+        TerminalKind::Unknown => Err("unsupported terminal: unknown".to_string()),
         TerminalKind::Konsole => {
             let panes = konsole::list_panes().map_err(|e| e.to_string())?;
             let pane = panes.into_iter().find(|p| {
@@ -156,6 +184,77 @@ pub fn resolve_jump_target(
     }
 }
 
+/// Read the process name from /proc/{pid}/comm
+pub fn get_process_name(pid: u32) -> Option<String> {
+    let path = format!("/proc/{pid}/comm");
+    std::fs::read_to_string(path).ok().map(|s| s.trim().to_string())
+}
+
+/// Read the parent PID from /proc/{pid}/status
+pub fn get_parent_pid(pid: u32) -> Option<u32> {
+    let path = format!("/proc/{pid}/status");
+    let status = std::fs::read_to_string(path).ok()?;
+    status
+        .lines()
+        .find(|l| l.starts_with("PPid:"))?
+        .split_whitespace()
+        .nth(1)?
+        .parse()
+        .ok()
+}
+
+/// Walk the process tree from `ppid` upward to detect the running terminal.
+/// `pid` is the hook's own PID, used to match against terminal panes.
+pub fn detect_terminal_from_pid(pid: u32, ppid: u32) -> Option<(TerminalKind, TerminalId)> {
+    let mut current = ppid;
+
+    for _ in 0..10 {
+        let name = get_process_name(current)?;
+
+        let result = match name.as_str() {
+            "tmux: server" | "tmux" => {
+                let (session, window, pane) = tmux::locate_pane(pid)?;
+                Some((
+                    TerminalKind::Tmux,
+                    TerminalId::TmuxWindow { session, window, pane },
+                ))
+            }
+            "zellij" | "zellij-server" => {
+                let (session, tab, pane) = zellij::locate_pane(pid)?;
+                Some((
+                    TerminalKind::Zellij,
+                    TerminalId::ZellijPane { session, tab, pane },
+                ))
+            }
+            "kitty" => {
+                let window_id = kitty::find_window_by_pid(pid)?;
+                Some((TerminalKind::Kitty, TerminalId::Kitty { window_id }))
+            }
+            "wezterm-gui" | "wezterm" => {
+                let pane_id = wezterm::find_pane_id_by_pid(pid)?;
+                Some((TerminalKind::WezTerm, TerminalId::WezTerm { pane_id }))
+            }
+            "ghostty" => {
+                // Ghostty has no stable IPC API → store the ghostty PID as fallback
+                Some((TerminalKind::Ghostty, TerminalId::Ghostty { pid: current }))
+            }
+            _ => {
+                current = get_parent_pid(current)?;
+                continue;
+            }
+        };
+
+        if result.is_some() {
+            return result;
+        }
+
+        current = get_parent_pid(current)?;
+    }
+
+    // Fallback: store the hook PID
+    Some((TerminalKind::Unknown, TerminalId::Pid { pid }))
+}
+
 pub fn focus_terminal(pane_id: &str, terminal: Option<&str>) -> Result<(), String> {
     match parse_terminal_kind(terminal) {
         TerminalKind::Tmux => tmux::focus_pane(pane_id).map_err(|e| e.to_string()),
@@ -164,6 +263,7 @@ pub fn focus_terminal(pane_id: &str, terminal: Option<&str>) -> Result<(), Strin
         TerminalKind::WezTerm => wezterm::focus_pane(pane_id).map_err(|e| e.to_string()),
         TerminalKind::Kitty => kitty::focus_pane(pane_id).map_err(|e| e.to_string()),
         TerminalKind::Konsole => konsole::focus_pane(pane_id).map_err(|e| e.to_string()),
+        TerminalKind::Unknown => Err("unsupported terminal: unknown".to_string()),
         TerminalKind::Other(other) => Err(format!("unsupported terminal: {}", other)),
     }
 }

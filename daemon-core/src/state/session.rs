@@ -2,6 +2,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use crate::terminals::detector;
+use crate::terminals::{TerminalId, TerminalKind};
+
 use super::event::{
     AgentKind, DiffPayload, EventKind, JumpTarget, PermissionRequest, PlanProposal, QuestionPrompt,
     SessionPhase, UniversalEvent,
@@ -31,6 +34,16 @@ pub struct AgentSession {
     /// OS process ID provided by the shell wrapper — used by the process watcher.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub pid: Option<u32>,
+    /// Parent PID of the hook — used for terminal detection process tree walk.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ppid: Option<u32>,
+    /// Detected terminal kind (Tmux, Zellij, Kitty, etc.) — stored once at SessionStart.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_kind: Option<TerminalKind>,
+    /// Precise terminal pane identifier — stored once at SessionStart.
+    /// Enables direct jump without re-resolving the pane.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub terminal_id: Option<TerminalId>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub last_heartbeat: DateTime<Utc>,
@@ -39,6 +52,19 @@ pub struct AgentSession {
 
 impl AgentSession {
     pub fn new(event: &UniversalEvent) -> Self {
+        // Terminal detection at session start: walk the process tree from ppid
+        let (terminal_kind, terminal_id) = event
+            .ppid
+            .and_then(|ppid| {
+                let pid = event.pid.unwrap_or(0);
+                if pid == 0 {
+                    return None;
+                }
+                detector::detect_terminal_from_pid(pid, ppid)
+            })
+            .map(|(k, id)| (Some(k), Some(id)))
+            .unwrap_or((None, None));
+
         Self {
             id: event.session_id.clone(),
             agent: event.agent.clone(),
@@ -60,6 +86,9 @@ impl AgentSession {
             current_action: event.current_action.clone(),
             metadata: event.metadata.clone(),
             pid: event.pid,
+            ppid: event.ppid,
+            terminal_kind,
+            terminal_id,
             created_at: event.timestamp,
             updated_at: event.timestamp,
             last_heartbeat: event.timestamp,
@@ -150,6 +179,7 @@ mod tests {
             current_action: None,
             metadata: None,
             pid: None,
+            ppid: None,
             timestamp: chrono::Utc::now(),
         }
     }
@@ -220,6 +250,7 @@ mod tests {
                 command: "git push".to_string(),
                 description: "Push to remote".to_string(),
                 context: None,
+                diff: None,
                 created_at: Utc::now(),
                 expires_at: Utc::now() + chrono::Duration::minutes(5),
             }),
@@ -273,6 +304,7 @@ mod tests {
                 command: "rm -rf".to_string(),
                 description: "Dangerous".to_string(),
                 context: None,
+                diff: None,
                 created_at: Utc::now(),
                 expires_at: Utc::now() + chrono::Duration::minutes(5),
             }),
@@ -500,6 +532,7 @@ mod tests {
                     command: "write file".to_string(),
                     description: "Write to src/main.rs".to_string(),
                     context: None,
+                    diff: None,
                     created_at: Utc::now(),
                     expires_at: Utc::now() + chrono::Duration::minutes(5),
                 }),
@@ -788,6 +821,7 @@ mod tests {
                 command: "allow bash".to_string(),
                 description: "Execute shell command".to_string(),
                 context: None,
+                diff: None,
                 created_at: Utc::now(),
                 expires_at: Utc::now() + chrono::Duration::minutes(5),
             }),

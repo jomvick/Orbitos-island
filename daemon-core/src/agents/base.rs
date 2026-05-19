@@ -3,7 +3,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::agents::traits::{PluginError, PluginResult};
-use crate::state::{AgentKind, EventKind, JumpTarget, PermissionRequest, QuestionPrompt, UniversalEvent};
+use crate::state::{AgentKind, DiffPayload, EventKind, JumpTarget, PermissionRequest, QuestionPrompt, UniversalEvent};
 
 #[derive(Deserialize)]
 #[serde(untagged)]
@@ -28,6 +28,8 @@ pub enum BaseEvent {
         metadata: Option<serde_json::Value>,
         /// OS PID forwarded by shell wrapper
         pid: Option<u32>,
+        /// Parent PID of the hook — used for terminal detection process tree walk.
+        ppid: Option<u32>,
     },
     Raw(serde_json::Value),
 }
@@ -37,6 +39,7 @@ pub struct BasePermission {
     pub command: Option<String>,
     pub description: Option<String>,
     pub context: Option<String>,
+    pub diff: Option<DiffPayload>,
 }
 
 #[derive(Deserialize)]
@@ -73,6 +76,7 @@ pub trait SimplePlugin {
                 current_action,
                 metadata,
                 pid,
+                ppid,
             } => {
                 let event_kind = match self.map_event_type(&event_type) {
                     Some(k) => k,
@@ -84,6 +88,7 @@ pub trait SimplePlugin {
                     command: p.command.unwrap_or_default(),
                     description: p.description.unwrap_or_default(),
                     context: p.context,
+                    diff: p.diff,
                     created_at: Utc::now(),
                     expires_at: Utc::now() + chrono::Duration::minutes(5),
                 });
@@ -133,6 +138,7 @@ pub trait SimplePlugin {
                     error,
                     metadata,
                     pid,
+                    ppid,
                     timestamp: Utc::now(),
                 }))
             }
