@@ -6,6 +6,8 @@ import { useCursorEvents } from "../hooks/useCursorEvents";
 import { getAgentColor, getAgentDisplayName } from "@agentos/shared-schema";
 import type { AgentSession } from "@agentos/shared-schema";
 import { Dashboard } from "./Dashboard";
+import { SessionRow } from "./SessionRow";
+import { PhaseDot } from "./PhaseDot";
 
 function AnimatedNumber({ value, duration = 0.6 }: { value: number; duration?: number }) {
 const count = useMotionValue(0);
@@ -47,62 +49,6 @@ style={{ color, fontSize: size * 0.55 }}
 {initial}
 </span>
 </motion.div>
-);
-}
-
-function PhaseDot({ phase }: { phase: string }) {
-const phaseColors: Record<string, string> = {
-running: "#22c55e",
-waiting_permission: "#f59e0b",
-waiting_question: "#3b82f6",
-completed: "#6b7280",
-failed: "#ef4444",
-paused: "#4b5563",
-orphaned: "#6b7280",
-};
-
-const color = phaseColors[phase] ?? "#6b7280";
-const isError = phase === "failed";
-const isWarning = ["waiting_permission", "waiting_question"].includes(phase);
-
-const pulseClass = isError
-? "dot-pulse-error"
-: isWarning
-? "dot-pulse-warning"
-: "dot-pulse-running";
-
-return (
-<div className="relative flex items-center justify-center w-2 h-2 shrink-0">
-<div
-className={`absolute inset-0 rounded-full ${pulseClass}`}
-style={{ backgroundColor: color }}
-/>
-<div
-className="w-2 h-2 rounded-full relative z-10"
-style={{
-backgroundColor: color,
-boxShadow: `0 0 10px ${color}44`,
-}}
-/>
-</div>
-);
-}
-
-const TERMINAL_ICONS: Record<string, string> = {
-tmux: "tmux",
-zellij: "zellij",
-ghostty: "ghostty",
-wezterm: "wez",
-kitty: "kitty",
-};
-
-function TerminalBadge({ terminal }: { terminal?: string }) {
-if (!terminal) return null;
-const label = TERMINAL_ICONS[terminal] ?? terminal.slice(0, 4);
-return (
-<span className="text-[10px] font-mono text-white/30 px-1.5 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.06]">
-{label}
-</span>
 );
 }
 
@@ -350,14 +296,14 @@ const handleStopAll = async () => {
 };
 
 const handleSessionClick = (session: AgentSession) => {
-  if (session.permission) {
-    setPendingOverlay(session);
-    return;
-  }
-  if (session.jump_target || session.terminal) {
-    safeInvoke("jump_to_session", { sessionId: session.id });
-  }
-};
+    if (session.permission || session.question) {
+      setPendingOverlay(session);
+      return;
+    }
+    if (session.jump_target || session.terminal) {
+      safeInvoke("jump_to_session", { sessionId: session.id });
+    }
+  };
 
 const targetWidth = isExpanded ? 720 : 420;
 
@@ -496,74 +442,12 @@ className="overflow-hidden border-t border-white/[0.06]"
 
   <div className="space-y-0.5 max-h-[360px] overflow-y-auto custom-scrollbar">
     {activeSessions.map((s) => (
-      <button
+      <SessionRow
         key={s.id}
-        onClick={() => handleSessionClick(s)}
-        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl
-          hover:bg-white/[0.04] active:bg-white/[0.06] transition-all text-left group"
-      >
-        {/* Agent badge + phase dot */}
-        <div className="flex items-center gap-2 shrink-0">
-          <div
-            className="w-5 h-5 rounded flex items-center justify-center shrink-0"
-            style={{
-              backgroundColor: `${getAgentColor(s.agent)}33`,
-              borderColor: `${getAgentColor(s.agent)}55`,
-              borderWidth: 1,
-            }}
-          >
-            <span
-              className="font-bold leading-none text-[9px]"
-              style={{ color: getAgentColor(s.agent) }}
-            >
-              {getAgentDisplayName(s.agent).charAt(0)}
-            </span>
-          </div>
-          <PhaseDot phase={s.phase} />
-        </div>
-
-        {/* Task info */}
-        <div className="flex-1 min-w-0 text-left">
-          <p className="text-[12px] text-white/80 font-medium truncate leading-tight">
-            {(s as any).current_action
-              ? (s as any).current_action
-              : s.cwd
-              ? s.cwd.split("/").pop()
-              : getAgentDisplayName(s.agent)}
-          </p>
-          <div className="flex items-center gap-2 mt-0.5">
-            {s.cwd && (
-              <span className="text-[10px] text-white/30 truncate max-w-[120px] font-mono">
-                {s.cwd.split("/").slice(-2).join("/")}
-              </span>
-            )}
-            <span className="text-[10px] text-white/20 font-mono tabular-nums">
-              {(s.duration_ms / 1000).toFixed(1)}s
-            </span>
-            <TerminalBadge terminal={s.terminal} />
-          </div>
-        </div>
-
-        {/* Permission/question badge */}
-        <div className="flex items-center gap-1.5 shrink-0">
-          {s.permission && (
-            <span className="w-3.5 h-3.5 rounded-full bg-amber-500 flex items-center justify-center text-[7px] font-bold text-black">
-              !
-            </span>
-          )}
-          {s.question && (
-            <span className="w-3.5 h-3.5 rounded-full bg-blue-500 flex items-center justify-center text-[7px] font-bold text-black">
-              ?
-            </span>
-          )}
-          <svg
-            className="w-3 h-3 text-white/20 group-hover:text-white/40 transition-colors"
-            fill="none" viewBox="0 0 24 24" stroke="currentColor"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </div>
-      </button>
+        session={s}
+        onJump={(session) => safeInvoke("jump_to_session", { sessionId: session.id })}
+        onOpenOverlay={(session) => setPendingOverlay(session)}
+      />
     ))}
   </div>
 

@@ -3,43 +3,29 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../stores/sessionStore";
 import { shouldPlaySound } from "../stores/settingsStore";
-import type { AgentSession } from "@agentos/shared-schema";
+import type { AgentSession, UniversalEvent } from "@agentos/shared-schema";
+
+interface DaemonCommandResponse<T> {
+  data: T;
+}
 
 interface DaemonEventPayload {
   channel: string;
-  data: AgentSession | null;
+  data: UniversalEvent | AgentSession | null;
   timestamp: string;
 }
 
 const BASE_INTERVAL = 500;
 const MAX_INTERVAL = 5000;
 const PING_INTERVAL_MS = 5_000;
-const REFRESH_ACTIVE_MS = 5_000;
-const REFRESH_IDLE_MS = 20_000;
-
-const ACTIVE_PHASES = new Set([
-  "running",
-  "waiting_permission",
-  "waiting_question",
-]);
-
-function hasActiveSessions(): boolean {
-  const sessions = useSessionStore.getState().sessions;
-  for (const s of sessions.values()) {
-    if (ACTIVE_PHASES.has(s.phase)) return true;
-  }
-  return false;
-}
 
 export function useDaemonConnection() {
   const [connected, setConnected] = useState(false);
   const upsertSession = useSessionStore((s) => s.upsertSession);
   const syncSessions = useSessionStore((s) => s.syncSessions);
-  const setPendingOverlay = useSessionStore((s) => s.setPendingOverlay);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const refreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const attemptRef = useRef(0);
+const pingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+const attemptRef = useRef(0);
 
   const goOnline = useCallback(() => {
     setConnected(true);
@@ -55,8 +41,8 @@ export function useDaemonConnection() {
 
   const syncAllSessions = useCallback(async () => {
     try {
-      const result: any = await invoke("get_sessions", { filter: null });
-      const sessions: AgentSession[] = result?.data ?? [];
+      const result: DaemonCommandResponse<AgentSession[]> = await invoke("get_sessions", { filter: null });
+      const sessions = result?.data ?? [];
       syncSessions(sessions);
     } catch {
       // silent — ping handler manages connectivity
@@ -71,8 +57,8 @@ export function useDaemonConnection() {
     );
     retryRef.current = setTimeout(async () => {
       try {
-        const result: any = await invoke("get_sessions", { filter: null });
-        const sessions: AgentSession[] = result?.data ?? [];
+        const result: DaemonCommandResponse<AgentSession[]> = await invoke("get_sessions", { filter: null });
+        const sessions = result?.data ?? [];
         syncSessions(sessions);
         goOnline();
       } catch {
@@ -104,66 +90,61 @@ export function useDaemonConnection() {
         "daemon-event",
         (event) => {
           const payload = event.payload;
-          let session = payload.data as any;
-          if (session) {
-            // Map UniversalEvent to AgentSession structure if it's a raw event
-              if (session.session_id && !session.id) {
-                const eventKind = session.event;
-                let phase = "running";
-                if (eventKind === "session_completed") phase = "completed";
-                else if (eventKind === "session_failed") phase = "failed";
-                else if (eventKind === "session_paused") phase = "paused";
-                else if (eventKind === "permission_requested") phase = "waiting_permission";
-                else if (eventKind === "question_asked") phase = "waiting_question";
+          const raw = payload.data;
+          if (!raw) return;
 
-                // Play sound alerts for high-priority events
-                if (shouldPlaySound("permission_request") && eventKind === "permission_requested") {
-                  invoke("play_sound", { sound: "permission_request" }).catch(() => {});
-                } else if (shouldPlaySound("task_error") && eventKind === "session_failed") {
-                  invoke("play_sound", { sound: "task_error" }).catch(() => {});
-                } else if (shouldPlaySound("task_completed") && eventKind === "session_completed") {
-                  invoke("play_sound", { sound: "task_completed" }).catch(() => {});
-                }
-
-              session = {
-                id: session.session_id,
-                agent: session.agent,
-                phase,
-                tokens_input: session.tokens_input ?? 0,
-                tokens_output: session.tokens_output ?? 0,
-                duration_ms: session.duration_ms ?? 0,
-                created_at: session.timestamp ?? new Date().toISOString(),
-                updated_at: session.timestamp ?? new Date().toISOString(),
-                last_heartbeat: session.timestamp ?? new Date().toISOString(),
+          const mapped: AgentSession = "id" in raw && "phase" in raw
+            ? raw
+            : {
+                id: raw.session_id,
+                agent: raw.agent,
+                phase: (() => {
+                  const k = raw.event;
+                  if (k === "session_completed") return "completed";
+                  if (k === "session_failed") return "failed";
+                  if (k === "session_paused") return "paused";
+                  if (k === "permission_requested") return "waiting_permission";
+                  if (k === "question_asked") return "waiting_question";
+                  return "running";
+                })(),
+                tokens_input: raw.tokens_input ?? 0,
+                tokens_output: raw.tokens_output ?? 0,
+                duration_ms: raw.duration_ms ?? 0,
+                created_at: raw.timestamp ?? new Date().toISOString(),
+                updated_at: raw.timestamp ?? new Date().toISOString(),
+                last_heartbeat: raw.timestamp ?? new Date().toISOString(),
                 event_count: 1,
-                cwd: session.cwd,
-                branch: session.branch,
-                model: session.model,
-                permission: session.permission,
-                question: session.question,
-                jump_target: session.jump_target,
-                plan: session.plan,
-                diff: session.diff,
-                error: session.error,
-                current_action: session.current_action,
+                cwd: raw.cwd,
+                branch: raw.branch,
+                model: raw.model,
+                permission: raw.permission,
+                question: raw.question,
+                jump_target: raw.jump_target,
+                plan: raw.plan,
+                diff: raw.diff,
+                error: raw.error,
+                current_action: raw.current_action,
               };
-            }
 
-            upsertSession(session);
-            if (
-              session.phase === "waiting_permission" ||
-              session.phase === "waiting_question"
-            ) {
-              setPendingOverlay(session);
+          if (!("id" in raw)) {
+            const eventKind = (raw as UniversalEvent).event;
+            if (eventKind === "permission_requested" && shouldPlaySound("permission_request")) {
+              invoke("play_sound", { sound: "permission_request" }).catch(() => {});
+            } else if (eventKind === "session_failed" && shouldPlaySound("task_error")) {
+              invoke("play_sound", { sound: "task_error" }).catch(() => {});
+            } else if (eventKind === "session_completed" && shouldPlaySound("task_completed")) {
+              invoke("play_sound", { sound: "task_completed" }).catch(() => {});
             }
           }
+
+          upsertSession(mapped);
         },
       );
 
       // First sync: immediate
       try {
-        const result: any = await invoke("get_sessions", { filter: null });
-        const sessions: AgentSession[] = result?.data ?? [];
+        const result: DaemonCommandResponse<AgentSession[]> = await invoke("get_sessions", { filter: null });
+        const sessions = result?.data ?? [];
         syncSessions(sessions);
         goOnline();
       } catch {
@@ -211,7 +192,6 @@ export function useDaemonConnection() {
     syncAllSessions,
     syncSessions,
     upsertSession,
-    setPendingOverlay,
     scheduleRetry,
     goOnline,
     goOffline,

@@ -48,13 +48,20 @@ describe("Daemon disconnect orphaning integration", () => {
 
   it("clears pending overlay on disconnect", () => {
     const store = useSessionStore.getState();
-    store.upsertSession(makeSession("s1", "waiting_permission"));
-    store.setPendingOverlay(useSessionStore.getState().sessions.get("s1")!);
+    const permSession = makeSession("s1", "waiting_permission", {
+      permission: {
+        id: "p-s1",
+        command: "rm -rf /tmp",
+        description: "Remove temp dir",
+        created_at: new Date().toISOString(),
+        expires_at: new Date().toISOString(),
+      },
+    });
+    store.upsertSession(permSession);
 
     expect(useSessionStore.getState().pendingOverlay).not.toBeNull();
 
     store.orphanRunningSessions();
-    store.setPendingOverlay(null);
 
     expect(useSessionStore.getState().pendingOverlay).toBeNull();
   });

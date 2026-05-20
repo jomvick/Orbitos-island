@@ -21,6 +21,9 @@ fn is_pid_alive(pid: u32) -> bool {
     #[cfg(not(target_os = "linux"))]
     {
         // Portable: signal 0 checks existence without killing the process.
+        // SAFETY: signal 0 does not modify process state — it only checks
+        // whether the target PID exists. The pid_t cast from u32 is valid
+        // on all POSIX platforms where this cfg gate applies.
         unsafe { libc::kill(pid as libc::pid_t, 0) == 0 }
     }
 }

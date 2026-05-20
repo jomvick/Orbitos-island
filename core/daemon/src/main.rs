@@ -160,7 +160,10 @@ async fn main() {
         .unwrap_or_else(agentos_ipc::get_default_socket_path);
 
     if !socket_path.is_absolute() {
-        let home = std::env::var("HOME").expect("HOME env var not set");
+        let home = std::env::var("HOME").unwrap_or_else(|_| {
+            warn!("HOME env var not set, falling back to /tmp");
+            "/tmp".to_string()
+        });
         socket_path = std::path::Path::new(&home).join(&socket_path);
     }
 

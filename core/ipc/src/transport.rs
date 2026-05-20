@@ -7,7 +7,10 @@ use tokio::net::{UnixListener, UnixStream};
 use super::codec::{BridgeCodec, CodecError};
 
 pub fn get_default_socket_path() -> PathBuf {
-    let home = std::env::var("HOME").expect("HOME env var not set");
+    let home = std::env::var("HOME").unwrap_or_else(|_| {
+        tracing::warn!("HOME env var not set, falling back to /tmp");
+        "/tmp".to_string()
+    });
     Path::new(&home).join(".agentos").join("run").join("agentosd.sock")
 }
 

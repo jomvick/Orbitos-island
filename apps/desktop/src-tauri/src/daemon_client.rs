@@ -4,6 +4,10 @@ use tokio::net::UnixStream;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt};
 use uuid::Uuid;
 
+const MAX_RECONNECT_ATTEMPTS: u32 = 10;
+const BASE_RETRY_MS: u64 = 500;
+const MAX_RETRY_MS: u64 = 5_000;
+
 fn get_socket_path() -> String {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
     format!("{}/.agentos/run/agentosd.sock", home)
@@ -22,18 +26,27 @@ pub struct DaemonClient {
 }
 
 pub async fn connect_and_listen(app: AppHandle) -> Result<(), String> {
+    let mut attempt: u32 = 0;
+
     loop {
         let socket_path = get_socket_path();
-        tracing::info!("attempting to connect to daemon at {}", socket_path);
+        tracing::info!("attempting to connect to daemon at {} (attempt {}/{})", socket_path, attempt + 1, MAX_RECONNECT_ATTEMPTS);
         
         let stream_result = UnixStream::connect(&socket_path).await;
         
         let stream = match stream_result {
             Ok(s) => s,
             Err(e) => {
-                tracing::warn!("failed to connect to daemon: {}. Retrying in 2s...", e);
+                attempt += 1;
+                if attempt >= MAX_RECONNECT_ATTEMPTS {
+                    tracing::error!("failed to connect to daemon after {} attempts. Giving up.", MAX_RECONNECT_ATTEMPTS);
+                    let _ = app.emit("daemon-unavailable", true);
+                    return Err(format!("daemon unreachable after {} attempts", MAX_RECONNECT_ATTEMPTS));
+                }
+                let delay_ms = std::cmp::min(BASE_RETRY_MS * 2u64.pow(attempt - 1), MAX_RETRY_MS);
+                tracing::warn!("failed to connect to daemon: {}. Retrying in {}ms (attempt {}/{})...", e, delay_ms, attempt, MAX_RECONNECT_ATTEMPTS);
                 let _ = app.emit("daemon-disconnected", true);
-                tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
                 continue;
             }
         };
@@ -57,6 +70,7 @@ pub async fn connect_and_listen(app: AppHandle) -> Result<(), String> {
 
         tracing::info!("connected to daemon and subscribed to sessions");
         let _ = app.emit("daemon-connected", true);
+        attempt = 0;
 
         let mut line = String::new();
         loop {
@@ -102,9 +116,16 @@ pub async fn connect_and_listen(app: AppHandle) -> Result<(), String> {
             }
         }
 
-        tracing::info!("disconnected from daemon. Retrying in 2s...");
+        tracing::info!("disconnected from daemon. Retrying...");
         let _ = app.emit("daemon-disconnected", true);
-        tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+        attempt += 1;
+        if attempt >= MAX_RECONNECT_ATTEMPTS {
+            tracing::error!("exceeded max reconnect attempts ({}) after disconnect.", MAX_RECONNECT_ATTEMPTS);
+            let _ = app.emit("daemon-unavailable", true);
+            return Err(format!("exceeded max reconnect attempts ({})", MAX_RECONNECT_ATTEMPTS));
+        }
+        let delay_ms = std::cmp::min(BASE_RETRY_MS * 2u64.pow(attempt - 1), MAX_RETRY_MS);
+        tokio::time::sleep(tokio::time::Duration::from_millis(delay_ms)).await;
     }
 }
 

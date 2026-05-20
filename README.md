@@ -225,30 +225,37 @@ agentos/
 
 ## Active Roadmap & Issues
 
-We have organized our pending roadmap and recent core analysis findings into **active, link-tracked GitHub Issues**. Contributors are highly encouraged to click and inspect their full technical requirements below:
+Each item links to its GitHub Issue with full technical specs. Status reflects the **actual codebase state**, not aspirations.
 
-### Vague Roadmap Refinement:
-- [x] Daemon IPC protocol, normalizer plugins, state machine, and persistence.
-- [x] 9 AI agent integrations and tmux session jumping.
-- [x] Translucent Tauri floating desktop bar, command palette, and overlay HUD.
-- [x] [System Sound Alerts (Issue #7)](https://github.com/jomvick/Orbitos-island/issues/7) — Custom PipeWire sound playbacks on high-priority agent transitions.
-- [ ] [Plan Review Overlay (Issue #6)](https://github.com/jomvick/Orbitos-island/issues/6) — Inline file diff visualization inside permission prompt overlays.
-- [ ] [Agent Auto-Discovery (Issue #8)](https://github.com/jomvick/Orbitos-island/issues/8) — Setup assistant detecting local agent installs and placing hooks automatically.
-- [ ] [Timeline Filters & Pagination (Issue #9)](https://github.com/jomvick/Orbitos-island/issues/9) — Database-level query limits and dropdown filters for timeline feeds.
-- [ ] [Vibe Island Feature Parity (Issue #10)](https://github.com/jomvick/Orbitos-island/issues/10) — SSH tunneling port forwards, daily token quotas, and smart action triggers.
-- [ ] [Fluid HUD Orb Animations (Issue #11)](https://github.com/jomvick/Orbitos-island/issues/11) — Liquid shape-shifting SVG indicator representing agent cognitive state.
+### Completed:
 
-### Core Enhancements & Stability Issues:
-- [ ] [Global System-wide Shortcuts (Issue #12)](https://github.com/jomvick/Orbitos-island/issues/12) — Tauri global keyboard shortcuts to toggle the cockpit view instantly.
-- [ ] [Daemon Auto-Spawning & Watchdog (Issue #13)](https://github.com/jomvick/Orbitos-island/issues/13) — Automatically launch `agentosd` on app start and manage logging.
-- [x] [Native Terminal Focus Jump (Issue #14)](https://github.com/jomvick/Orbitos-island/issues/14) — Process tree walk from hook PPID, precise pane targeting for tmux/zellij/kitty/Ghostty/WezTerm/Konsole, X11/Wayland fallback dispatcher.
-- [ ] [Wayland Layer-Shell Overlay Positioning (Issue #15)](https://github.com/jomvick/Orbitos-island/issues/15) — GTK layer-shell window bounds configurations for solid float on Wayland.
-- [ ] [API Token Pricing and Budget Thresholds (Issue #16)](https://github.com/jomvick/Orbitos-island/issues/16) — Multi-model price trackers and hard notifications when budgets are reached.
+- [x] Daemon IPC protocol — Serde-tagged discriminated unions (`IpcMessage`, `IpcCommand`, `IpcStatus`), Unix socket codec, normalizer plugins, session state machine, SQLite persistence.
+- [x] 9 AI agent integrations — Claude, OpenCode, Codex, Aider, Gemini, Antigravity, Cursor, Copilot, DeepSeek. Each has a normalizer plugin in `plugins/`.
+- [x] Floating bar + overlay HUD — Tauri v2 translucent window, FloatingBar (priority pill + hover panel + cockpit), Overlay (Permission/Question/Review tabs), Dashboard (sessions + analytics).
+- [x] [System Sound Alerts (Issue #7)](https://github.com/jomvick/Orbitos-island/issues/7) — `pw-play` / `paplay` / `aplay` auto-detection, embedded WAV assets, Tauri `play_sound` command invoked on `permission_requested`, `session_failed`, `session_completed` events.
+- [x] [Plan Review Overlay (Issue #6)](https://github.com/jomvick/Orbitos-island/issues/6) — `PlanDiffView` renders unified diffs with color-coded add/remove/hunk lines, per-file expand/collapse cards, plan proposal steps. Overlay has "Permission" and "Review Changes" tabs.
+- [x] [Agent Auto-Discovery (Issue #8)](https://github.com/jomvick/Orbitos-island/issues/8) — `agentosd --discover` scans PATH for 9 agents, auto-installs hooks for Claude/OpenCode, creates shell wrappers in `~/.local/share/agentos/bin/`, injects PATH into shell configs. IPC command and Tauri bridge exist.
+- [x] [Native Terminal Focus Jump (Issue #14)](https://github.com/jomvick/Orbitos-island/issues/14) — Process tree walk from hook PPID via `/proc`, pane targeting for tmux/zellij/kitty/Ghostty/WezTerm/Konsole, X11/Wayland fallback dispatcher (`xdotool` → `wmctrl` → `swaymsg` → `ydotool`).
 
-### Verified Technical Debt:
-- [ ] [Replace bare unwrap() with expect() (Issue #17)](https://github.com/jomvick/Orbitos-island/issues/17) — Better panic messages in Tauri startup path.
-- [ ] [Add retry to agentos-hook sender (Issue #18)](https://github.com/jomvick/Orbitos-island/issues/18) — Single retry for transient daemon unavailability.
-- [ ] [Type IPC payload with discriminated union (Issue #19)](https://github.com/jomvick/Orbitos-island/issues/19) — Replace `as any` casts with typed event unions.
+### In Progress:
+
+- [ ] [Agent Auto-Discovery UI (Issue #8)](https://github.com/jomvick/Orbitos-island/issues/8) — Backend is done. **Missing: first-run setup wizard component** that invokes `discover_agents` IPC, shows detected agents, and guides hook installation visually.
+- [ ] [Timeline Filters & Pagination (Issue #9)](https://github.com/jomvick/Orbitos-island/issues/9) — Backend `get_timeline(limit)` exists with SQL `LIMIT ?1`. **Missing: filter dropdowns (agent, phase, date range), pagination UI ("load more" / page nav), offset parameter in SQL query. Timeline.tsx currently hard-codes `.slice(0, 20)` and doesn't invoke `get_timeline` IPC.**
+- [ ] [Type IPC payload in Tauri bridge (Issue #19)](https://github.com/jomvick/Orbitos-island/issues/19) — Rust IPC uses serde-tagged discriminated unions. TypeScript `shared-schema` defines `AgentSession`, `UniversalEvent`, etc. with no `any`. **Missing: `daemon_client.rs` still deserializes as `serde_json::Value`; 2 `any` casts remain in production TSX (`FloatingBar.tsx` safeInvoke args, `Dashboard.tsx` AgentPill cast). `(s as any).current_action` eliminated — `SessionRow.tsx` accesses `session.current_action` directly via typed `AgentSession`. Tauri commands should return typed structs matching the schema.**
+
+### Planned:
+
+- [ ] [Vibe Island Feature Parity (Issue #10)](https://github.com/jomvick/Orbitos-island/issues/10) — SSH tunneling for remote sessions, daily token quotas with hard limits, smart action triggers (auto-approve trusted commands, auto-reject dangerous ones).
+- [ ] [Fluid HUD Orb Animations (Issue #11)](https://github.com/jomvick/Orbitos-island/issues/11) — Liquid shape-shifting SVG orb that morphs based on agent cognitive state (idle → thinking → waiting → done). Requires lottie/SVG animation engine and phase-to-shape mapping.
+- [ ] [Global System-wide Shortcuts (Issue #12)](https://github.com/jomvick/Orbitos-island/issues/12) — **Needs `tauri-plugin-global-shortcut`** integration. Currently only local DOM `keydown` listeners (Escape, Alt+A, 1-9 for question answers) — these only work when the Tauri window has focus. Global shortcuts must work regardless of focus.
+- [ ] [Daemon Auto-Spawning & Watchdog (Issue #13)](https://github.com/jomvick/Orbitos-island/issues/13) — Daemon has internal watchdogs (PID watcher, stale session orphaning). **Missing: Tauri `setup()` must detect if `agentosd` socket exists, spawn it as a child process if not, and restart on crash. Currently `daemon_client.rs` retries 10× then gives up — no spawn logic.**
+- [ ] [Wayland Layer-Shell Overlay Positioning (Issue #15)](https://github.com/jomvick/Orbitos-island/issues/15) — GTK layer-shell integration for the floating bar to stay anchored on Wayland compositors that don't support X11 overlay positioning. Currently uses Tauri's default window positioning which may drift.
+- [ ] [API Token Pricing & Budget Thresholds (Issue #16)](https://github.com/jomvick/Orbitos-island/issues/16) — Per-model price tables (`input_cost_per_1k`, `output_cost_per_1k`), session cost accumulation, hard notification when daily/monthly budget exceeded, analytics charts.
+
+### Technical Debt:
+
+- [ ] [Replace remaining bare unwrap() (Issue #17)](https://github.com/jomvick/Orbitos-island/issues/17) — 5 production `unwrap()` calls remain: `lib.rs` (2: webview window + default icon — risky), `main.rs` discover mode (1: serde serialization — safe but should use `expect`), `watcher.rs` (2: `s.pid.unwrap()` — guarded by `is_some()` filter but violates guideline). HOME env var fallbacks already migrated from `expect()` to `unwrap_or_else(|_| "/tmp")`.
+- [ ] [Add retry to agentos-hook sender (Issue #18)](https://github.com/jomvick/Orbitos-island/issues/18) — **Zero retry logic.** `sender.rs` `send_event()` connects with 100ms timeout, fails immediately if daemon is unreachable. Transient daemon restarts cause dropped events. Needs: 1-2 retries with 200-500ms backoff. `daemon_client.rs` reconnect already has exponential backoff (500ms→5s, 10 attempts cap) — same pattern should be applied to the hook.
 
 ---
 
