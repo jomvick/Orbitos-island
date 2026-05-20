@@ -1,14 +1,23 @@
 mod daemon_client;
 mod sounds;
+mod wayland;
 
 use tauri::Emitter;
 use tauri::Manager;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
+use wayland::{detect_wayland, Compositor, APP_ID};
+
 #[tauri::command]
 fn set_ignore_cursor(app: tauri::AppHandle, ignore: bool) {
-    // No-op to preserve always-interactive window behavior under dynamic sizing
+    if let Some(window) = app.get_webview_window("main") {
+        if ignore {
+            let _ = window.set_ignore_cursor_events(true);
+        } else {
+            let _ = window.set_ignore_cursor_events(false);
+        }
+    }
 }
 
 #[tauri::command]
@@ -74,7 +83,6 @@ async fn start_drag(window: tauri::WebviewWindow) -> Result<(), String> {
 #[tauri::command]
 async fn ensure_always_on_top(window: tauri::WebviewWindow) -> Result<(), String> {
     window.set_always_on_top(true).map_err(|e| e.to_string())?;
-    window.set_focus().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -136,6 +144,38 @@ pub fn run() {
             let _ = window.set_resizable(true);
             let _ = window.set_skip_taskbar(true);
             let _ = window.set_ignore_cursor_events(false);
+
+            // Wayland compositor detection and layer-shell overlay configuration
+            let ws = detect_wayland();
+            tracing::info!(
+                "display server: {}, compositor: {:?}",
+                if ws.active { "Wayland" } else { "X11" },
+                ws.compositor
+            );
+
+            if ws.active {
+                ws.compositor.configure_overlay_rules(APP_ID);
+
+                match &ws.compositor {
+                    Compositor::Sway => {
+                        // On Sway, reapplying always-on-top after a delay helps anchor
+                        let w = window.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(800));
+                            let _ = w.set_always_on_top(true);
+                        });
+                    }
+                    Compositor::Hyprland => {
+                        // Hyprland: set floating + pin via window rules
+                        let w = window.clone();
+                        std::thread::spawn(move || {
+                            std::thread::sleep(std::time::Duration::from_millis(600));
+                            let _ = w.set_always_on_top(true);
+                        });
+                    }
+                    _ => {}
+                }
+            }
 
             // Enforce initial position top-center
             if let Ok(Some(monitor)) = window.current_monitor() {

@@ -240,6 +240,7 @@ Each item links to its GitHub Issue with full technical specs. Status reflects t
 - [x] [Type IPC payload with discriminated union (Issue #19)](https://github.com/jomvick/Orbitos-island/issues/19) — `daemon_client.rs` emits `data_type` tag (`"session"` | `"event"`), TypeScript `DaemonEventData` discriminated union in shared-schema, all `as any` casts removed, `useDaemonConnection.ts` dispatches on `data_type` instead of duck-typing.
 - [x] [Replace bare unwrap() with expect() (Issue #17)](https://github.com/jomvick/Orbitos-island/issues/17) — `lib.rs` Tauri entry points use `expect()` with descriptive messages. `clippy.toml` disallows `Option::unwrap` and `Result::unwrap`.
 - [x] [Retry in agentos-hook sender (Issue #18)](https://github.com/jomvick/Orbitos-island/issues/18) — `sender.rs` `send_event()` retries once with 50ms delay before failing, preventing dropped events on transient daemon startup.
+- [x] [Wayland Layer-Shell Overlay Positioning (Issue #15)](https://github.com/jomvick/Orbitos-island/issues/15) — Compositor detection (Sway/Hyprland/River/KDE/GNOME), per-compositor overlay rules via native CLI tools (`swaymsg`, `hyprctl`, `riverctl`, `kwriteconfig`), `set_ignore_cursor_events` wired to Tauri API, always-on-top without focus steal on Wayland.
 
 ### Planned:
 
@@ -247,7 +248,6 @@ Each item links to its GitHub Issue with full technical specs. Status reflects t
 - [ ] [Fluid HUD Orb Animations (Issue #11)](https://github.com/jomvick/Orbitos-island/issues/11) — Liquid shape-shifting SVG orb that morphs based on agent cognitive state (idle → thinking → waiting → done). Requires lottie/SVG animation engine and phase-to-shape mapping.
 - [ ] [Global System-wide Shortcuts (Issue #12)](https://github.com/jomvick/Orbitos-island/issues/12) — **Needs `tauri-plugin-global-shortcut`** integration. Currently only local DOM `keydown` listeners (Escape, Alt+A, 1-9 for question answers) — these only work when the Tauri window has focus. Global shortcuts must work regardless of focus.
 - [ ] [Daemon Auto-Spawning & Watchdog (Issue #13)](https://github.com/jomvick/Orbitos-island/issues/13) — Daemon has internal watchdogs (PID watcher, stale session orphaning). **Missing: Tauri `setup()` must detect if `agentosd` socket exists, spawn it as a child process if not, and restart on crash. Currently `daemon_client.rs` retries 10× then gives up — no spawn logic.**
-- [ ] [Wayland Layer-Shell Overlay Positioning (Issue #15)](https://github.com/jomvick/Orbitos-island/issues/15) — GTK layer-shell integration for the floating bar to stay anchored on Wayland compositors that don't support X11 overlay positioning. Currently uses Tauri's default window positioning which may drift.
 - [ ] [API Token Pricing & Budget Thresholds (Issue #16)](https://github.com/jomvick/Orbitos-island/issues/16) — Per-model price tables (`input_cost_per_1k`, `output_cost_per_1k`), session cost accumulation, hard notification when daily/monthly budget exceeded, analytics charts.
 
 ### Technical Debt:
