@@ -427,7 +427,7 @@ mod tests {
         };
 
         db.insert_event(&event).unwrap();
-        let timeline = db.get_timeline(10).unwrap();
+        let timeline = db.get_timeline(10, 0, None, None).unwrap();
         assert_eq!(timeline.len(), 1);
         assert_eq!(timeline[0].agent, "opencode");
     }
@@ -469,7 +469,7 @@ mod tests {
         db.insert_event(&event).unwrap();
         db.insert_event(&event).unwrap();
 
-        let timeline = db.get_timeline(10).unwrap();
+        let timeline = db.get_timeline(10, 0, None, None).unwrap();
         assert_eq!(timeline.len(), 1);
     }
 

@@ -234,16 +234,12 @@ Each item links to its GitHub Issue with full technical specs. Status reflects t
 - [x] Floating bar + overlay HUD — Tauri v2 translucent window, FloatingBar (priority pill + hover panel + cockpit), Overlay (Permission/Question/Review tabs), Dashboard (sessions + analytics).
 - [x] [System Sound Alerts (Issue #7)](https://github.com/jomvick/Orbitos-island/issues/7) — `pw-play` / `paplay` / `aplay` auto-detection, embedded WAV assets, Tauri `play_sound` command invoked on `permission_requested`, `session_failed`, `session_completed` events.
 - [x] [Plan Review Overlay (Issue #6)](https://github.com/jomvick/Orbitos-island/issues/6) — `PlanDiffView` renders unified diffs with color-coded add/remove/hunk lines, per-file expand/collapse cards, plan proposal steps. Overlay has "Permission" and "Review Changes" tabs.
-- [x] [Agent Auto-Discovery (Issue #8)](https://github.com/jomvick/Orbitos-island/issues/8) — `agentosd --discover` scans PATH for 9 agents, auto-installs hooks for Claude/OpenCode, creates shell wrappers in `~/.local/share/agentos/bin/`, injects PATH into shell configs. IPC command and Tauri bridge exist.
+- [x] [Agent Auto-Discovery (Issue #8)](https://github.com/jomvick/Orbitos-island/issues/8) — `agentosd --discover` scans PATH for 9 agents, auto-installs hooks for Claude/OpenCode, creates shell wrappers in `~/.local/share/agentos/bin/`, injects PATH into shell configs. `DiscoveryWizard` UI component in Settings > Plugins invokes `discover_agents` IPC, shows live detection status per agent, one-click "Install Hooks" buttons.
 - [x] [Native Terminal Focus Jump (Issue #14)](https://github.com/jomvick/Orbitos-island/issues/14) — Process tree walk from hook PPID via `/proc`, pane targeting for tmux/zellij/kitty/Ghostty/WezTerm/Konsole, X11/Wayland fallback dispatcher (`xdotool` → `wmctrl` → `swaymsg` → `ydotool`).
+- [x] [Timeline Filters & Pagination (Issue #9)](https://github.com/jomvick/Orbitos-island/issues/9) — Backend SQL supports `OFFSET` + dynamic `WHERE` filters (agent, phase/event_kind). Frontend Timeline rewired to `invoke("get_timeline", { limit, offset, agent, phase })` with agent/phase dropdowns and "Load More" pagination button.
 - [x] [Type IPC payload with discriminated union (Issue #19)](https://github.com/jomvick/Orbitos-island/issues/19) — `daemon_client.rs` emits `data_type` tag (`"session"` | `"event"`), TypeScript `DaemonEventData` discriminated union in shared-schema, all `as any` casts removed, `useDaemonConnection.ts` dispatches on `data_type` instead of duck-typing.
 - [x] [Replace bare unwrap() with expect() (Issue #17)](https://github.com/jomvick/Orbitos-island/issues/17) — `lib.rs` Tauri entry points use `expect()` with descriptive messages. `clippy.toml` disallows `Option::unwrap` and `Result::unwrap`.
 - [x] [Retry in agentos-hook sender (Issue #18)](https://github.com/jomvick/Orbitos-island/issues/18) — `sender.rs` `send_event()` retries once with 50ms delay before failing, preventing dropped events on transient daemon startup.
-
-### In Progress:
-
-- [ ] [Agent Auto-Discovery UI (Issue #8)](https://github.com/jomvick/Orbitos-island/issues/8) — Backend is done. **Missing: first-run setup wizard component** that invokes `discover_agents` IPC, shows detected agents, and guides hook installation visually.
-- [ ] [Timeline Filters & Pagination (Issue #9)](https://github.com/jomvick/Orbitos-island/issues/9) — Backend `get_timeline(limit)` exists with SQL `LIMIT ?1`. **Missing: filter dropdowns (agent, phase, date range), pagination UI ("load more" / page nav), offset parameter in SQL query. Timeline.tsx currently hard-codes `.slice(0, 20)` and doesn't invoke `get_timeline` IPC.**
 
 ### Planned:
 

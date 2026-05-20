@@ -65,6 +65,11 @@ pub enum IpcCommand {
     GetAgentAnalytics,
     GetTimeline {
         limit: u32,
+        offset: u32,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        agent: Option<AgentKind>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        phase: Option<String>,
     },
     SearchSessions {
         query: String,

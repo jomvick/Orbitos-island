@@ -338,8 +338,8 @@ async fn handle_command(
         IpcCommand::GetAgentAnalytics => {
             crate::handlers::handle_get_agent_analytics(codec, id, state).await;
         }
-        IpcCommand::GetTimeline { limit } => {
-            crate::handlers::handle_get_timeline(codec, id, limit, state).await;
+        IpcCommand::GetTimeline { limit, offset, agent, phase } => {
+            crate::handlers::handle_get_timeline(codec, id, limit, offset, agent.map(|a| a.to_string()), phase, state).await;
         }
         IpcCommand::SearchSessions { query } => {
             crate::handlers::handle_search_sessions(codec, id, query, state).await;

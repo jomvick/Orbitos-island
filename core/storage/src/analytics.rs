@@ -111,17 +111,41 @@ impl Database {
         Ok(rows)
     }
 
-    pub fn get_timeline(&self, limit: u32) -> Result<Vec<TimelineEntry>, crate::db::DbError> {
-        let mut stmt = self.conn.prepare(
+    pub fn get_timeline(
+        &self,
+        limit: u32,
+        offset: u32,
+        agent: Option<&str>,
+        phase: Option<&str>,
+    ) -> Result<Vec<TimelineEntry>, crate::db::DbError> {
+        let mut sql = String::from(
             "SELECT e.session_id, e.agent, e.event_kind, e.timestamp, s.cwd
              FROM events e
              LEFT JOIN sessions s ON e.session_id = s.id
-             ORDER BY e.timestamp DESC
-             LIMIT ?1",
-        )?;
+             WHERE 1=1",
+        );
+
+        let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+        if let Some(a) = agent {
+            sql.push_str(" AND e.agent = ?");
+            params.push(Box::new(a.to_string()));
+        }
+
+        if let Some(p) = phase {
+            sql.push_str(" AND e.event_kind = ?");
+            params.push(Box::new(phase_to_event_kind(p).to_string()));
+        }
+
+        sql.push_str(" ORDER BY e.timestamp DESC LIMIT ? OFFSET ?");
+        params.push(Box::new(limit));
+        params.push(Box::new(offset));
+
+        let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        let mut stmt = self.conn.prepare(&sql)?;
 
         let entries = stmt
-            .query_map([limit], |row| {
+            .query_map(param_refs.as_slice(), |row| {
                 let cwd: Option<String> = row.get(4)?;
                 Ok(TimelineEntry {
                     session_id: row.get(0)?,
@@ -192,5 +216,17 @@ fn model_cost_per_token(agent: &str) -> f64 {
         "antigravity" => 0.000_002,
         "gemini" => 0.000_001_5,
         _ => 0.000_003,
+    }
+}
+
+fn phase_to_event_kind(phase: &str) -> &str {
+    match phase {
+        "running" => "session_started",
+        "completed" => "session_completed",
+        "failed" => "session_failed",
+        "waiting_permission" => "permission_requested",
+        "waiting_question" => "question_asked",
+        "paused" => "session_paused",
+        _ => phase,
     }
 }

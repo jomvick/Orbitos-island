@@ -221,11 +221,18 @@ pub async fn get_agent_analytics() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-pub async fn get_timeline(limit: u32) -> Result<serde_json::Value, String> {
-    let command_action = serde_json::json!({
+pub async fn get_timeline(limit: u32, offset: u32, agent: Option<String>, phase: Option<String>) -> Result<serde_json::Value, String> {
+    let mut command_action = serde_json::json!({
         "action": "get_timeline",
-        "limit": limit
+        "limit": limit,
+        "offset": offset
     });
+    if let Some(ref a) = agent {
+        command_action["agent"] = serde_json::json!(a);
+    }
+    if let Some(ref p) = phase {
+        command_action["phase"] = serde_json::json!(p);
+    }
     send_command(command_action).await
 }
 

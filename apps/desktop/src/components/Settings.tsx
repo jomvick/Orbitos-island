@@ -1,6 +1,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getSettings, updateSettings } from "../stores/settingsStore";
+import { DiscoveryWizard } from "./DiscoveryWizard";
 
 type SettingsTab = "general" | "plugins" | "terminals" | "notifications" | "about";
 
@@ -63,15 +64,6 @@ export function Settings() {
     { id: "terminals", label: "Terminals" },
     { id: "notifications", label: "Notifications" },
     { id: "about", label: "About" },
-  ];
-
-  const pluginList = [
-    { name: "opencode", desc: "OpenCode CLI", version: "0.1.0", active: true },
-    { name: "claude", desc: "Claude Code", version: "0.1.0", active: true },
-    { name: "codex", desc: "Codex CLI", version: "0.1.0", active: true },
-    { name: "antigravity", desc: "Antigravity", version: "0.1.0", active: true },
-    { name: "aider", desc: "Aider AI", version: "0.1.0", active: true },
-    { name: "gemini", desc: "Gemini CLI", version: "0.1.0", active: true },
   ];
 
   const terminalList = [
@@ -158,26 +150,8 @@ export function Settings() {
               exit={{ opacity: 0, y: -8 }}
               className="space-y-2"
             >
-              <p className="text-[11px] text-white/30 uppercase tracking-[0.1em] font-bold px-1">Registered Plugins</p>
-              {pluginList.map((p) => (
-                <div
-                  key={p.name}
-                  className="flex items-center justify-between py-2.5 px-4 rounded-xl bg-white/[0.03] border border-white/[0.06]"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-2 h-2 rounded-full ${
-                        p.active ? "bg-green-500" : "bg-white/20"
-                      }`}
-                    />
-                    <div>
-                      <p className="text-[13px] font-medium text-white/80">{p.name}</p>
-                      <p className="text-[11px] text-white/40">{p.desc} · v{p.version}</p>
-                    </div>
-                  </div>
-                  <Toggle enabled={p.active} onChange={() => {}} />
-                </div>
-              ))}
+              <p className="text-[11px] text-white/30 uppercase tracking-[0.1em] font-bold px-1">Agent Discovery</p>
+              <DiscoveryWizard />
             </motion.div>
           )}
 

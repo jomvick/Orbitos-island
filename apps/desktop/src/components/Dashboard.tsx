@@ -158,7 +158,7 @@ export function Dashboard({ embedded }: { embedded?: boolean }) {
           <AnimatePresence mode="wait" custom={tabDir}>
             {tab === "timeline" && (
               <TabPanel tab={tab} tabDir={tabDir}>
-                <Timeline sessions={filteredSessions} />
+                <Timeline />
               </TabPanel>
             )}
             {tab === "analytics" && (

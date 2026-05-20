@@ -114,13 +114,21 @@ pub async fn handle_get_agent_analytics(codec: &mut BridgeCodec, id: Uuid, state
     }
 }
 
-pub async fn handle_get_timeline(codec: &mut BridgeCodec, id: Uuid, limit: u32, state: &Arc<DaemonState>) {
+pub async fn handle_get_timeline(
+    codec: &mut BridgeCodec,
+    id: Uuid,
+    limit: u32,
+    offset: u32,
+    agent: Option<String>,
+    phase: Option<String>,
+    state: &Arc<DaemonState>,
+) {
     match state.db.as_ref() {
         Some(db) => {
             let data = db
                 .lock()
                 .await
-                .get_timeline(limit)
+                .get_timeline(limit, offset, agent.as_deref(), phase.as_deref())
                 .ok()
                 .and_then(|e| serde_json::to_value(&e).ok());
             match data {
