@@ -16,6 +16,7 @@ fn get_socket_path() -> String {
 #[derive(Clone, Serialize)]
 pub struct DaemonEvent {
     pub channel: String,
+    pub data_type: String,
     pub data: serde_json::Value,
     pub timestamp: String,
 }
@@ -88,17 +89,22 @@ pub async fn connect_and_listen(app: AppHandle) -> Result<(), String> {
 
                     match serde_json::from_str::<serde_json::Value>(trimmed) {
                         Ok(msg) => {
+                            let (data, data_type) = if let Some(session) = msg.get("session") {
+                                (session.clone(), "session")
+                            } else if let Some(event) = msg.get("event") {
+                                (event.clone(), "event")
+                            } else {
+                                (serde_json::Value::Null, "unknown")
+                            };
+
                             let event = DaemonEvent {
                                 channel: msg
                                     .get("channel")
                                     .and_then(|c| c.as_str())
                                     .unwrap_or("unknown")
                                     .to_string(),
-                                data: msg
-                                    .get("session")
-                                    .or_else(|| msg.get("event"))
-                                    .cloned()
-                                    .unwrap_or(serde_json::Value::Null),
+                                data_type: data_type.to_string(),
+                                data,
                                 timestamp: chrono::Utc::now().to_rfc3339(),
                             };
 

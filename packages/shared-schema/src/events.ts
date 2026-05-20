@@ -26,6 +26,11 @@ export type SessionPhase =
   | "paused"
   | "orphaned";
 
+export type DaemonEventData =
+  | { data_type: "session"; data: import("./sessions").AgentSession }
+  | { data_type: "event"; data: import("./sessions").UniversalEvent }
+  | { data_type: "unknown"; data: null };
+
 export const PHASE_DISPLAY: Record<SessionPhase, string> = {
   running: "Running",
   waiting_permission: "Waiting…",

@@ -5,6 +5,7 @@ import { SearchBar } from "./SearchBar";
 import { groupSessions, type GroupBy } from "../utils/sessionGrouping";
 import { motion, AnimatePresence } from "framer-motion";
 import { PlanDiffView } from "./PlanDiffView";
+import type { AgentSession } from "@agentos/shared-schema";
 
 const Timeline = lazy(() => import("./Timeline").then(m => ({ default: m.Timeline })));
 const AnalyticsPanel = lazy(() => import("./AnalyticsPanel").then(m => ({ default: m.AnalyticsPanel })));
@@ -288,17 +289,7 @@ export function Dashboard({ embedded }: { embedded?: boolean }) {
 }
 
 interface DashboardRowProps {
-  session: {
-    id: string;
-    agent: string;
-    phase: string;
-    tokens_input: number;
-    tokens_output: number;
-    model?: string;
-    cwd?: string;
-    branch?: string;
-    duration_ms: number;
-  };
+  session: AgentSession;
   compact?: boolean;
 }
 
@@ -312,7 +303,7 @@ function DashboardRow({ session, compact }: DashboardRowProps) {
       className="flex items-center gap-3 px-3 py-2 rounded-lg
         hover:bg-white/[0.04] transition-colors cursor-pointer group"
     >
-      <AgentPill session={session as any} compact />
+      <AgentPill session={session} compact />
       <div className="flex-1 min-w-0">
         {!compact && session.cwd && (
           <p className="text-[11px] text-text-dim truncate font-mono">{session.cwd}</p>

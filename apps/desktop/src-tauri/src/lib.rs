@@ -130,7 +130,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .setup(|app| {
-            let window = app.get_webview_window("main").unwrap();
+            let window = app.get_webview_window("main").expect("main window must exist at setup");
             let _ = window.set_decorations(false);
             let _ = window.set_always_on_top(true);
             let _ = window.set_resizable(true);
@@ -166,7 +166,7 @@ pub fn run() {
             let handle = app.handle().clone();
             let menu = build_tray_menu(&handle)?;
             let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
+                .icon(app.default_window_icon().expect("default window icon must be configured").clone())
                 .menu(&menu)
                 .on_menu_event(|app, event| {
                     handle_menu_event(app, event.id().as_ref());

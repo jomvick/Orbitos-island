@@ -236,12 +236,14 @@ Each item links to its GitHub Issue with full technical specs. Status reflects t
 - [x] [Plan Review Overlay (Issue #6)](https://github.com/jomvick/Orbitos-island/issues/6) — `PlanDiffView` renders unified diffs with color-coded add/remove/hunk lines, per-file expand/collapse cards, plan proposal steps. Overlay has "Permission" and "Review Changes" tabs.
 - [x] [Agent Auto-Discovery (Issue #8)](https://github.com/jomvick/Orbitos-island/issues/8) — `agentosd --discover` scans PATH for 9 agents, auto-installs hooks for Claude/OpenCode, creates shell wrappers in `~/.local/share/agentos/bin/`, injects PATH into shell configs. IPC command and Tauri bridge exist.
 - [x] [Native Terminal Focus Jump (Issue #14)](https://github.com/jomvick/Orbitos-island/issues/14) — Process tree walk from hook PPID via `/proc`, pane targeting for tmux/zellij/kitty/Ghostty/WezTerm/Konsole, X11/Wayland fallback dispatcher (`xdotool` → `wmctrl` → `swaymsg` → `ydotool`).
+- [x] [Type IPC payload with discriminated union (Issue #19)](https://github.com/jomvick/Orbitos-island/issues/19) — `daemon_client.rs` emits `data_type` tag (`"session"` | `"event"`), TypeScript `DaemonEventData` discriminated union in shared-schema, all `as any` casts removed, `useDaemonConnection.ts` dispatches on `data_type` instead of duck-typing.
+- [x] [Replace bare unwrap() with expect() (Issue #17)](https://github.com/jomvick/Orbitos-island/issues/17) — `lib.rs` Tauri entry points use `expect()` with descriptive messages. `clippy.toml` disallows `Option::unwrap` and `Result::unwrap`.
+- [x] [Retry in agentos-hook sender (Issue #18)](https://github.com/jomvick/Orbitos-island/issues/18) — `sender.rs` `send_event()` retries once with 50ms delay before failing, preventing dropped events on transient daemon startup.
 
 ### In Progress:
 
 - [ ] [Agent Auto-Discovery UI (Issue #8)](https://github.com/jomvick/Orbitos-island/issues/8) — Backend is done. **Missing: first-run setup wizard component** that invokes `discover_agents` IPC, shows detected agents, and guides hook installation visually.
 - [ ] [Timeline Filters & Pagination (Issue #9)](https://github.com/jomvick/Orbitos-island/issues/9) — Backend `get_timeline(limit)` exists with SQL `LIMIT ?1`. **Missing: filter dropdowns (agent, phase, date range), pagination UI ("load more" / page nav), offset parameter in SQL query. Timeline.tsx currently hard-codes `.slice(0, 20)` and doesn't invoke `get_timeline` IPC.**
-- [ ] [Type IPC payload in Tauri bridge (Issue #19)](https://github.com/jomvick/Orbitos-island/issues/19) — Rust IPC uses serde-tagged discriminated unions. TypeScript `shared-schema` defines `AgentSession`, `UniversalEvent`, etc. with no `any`. **Missing: `daemon_client.rs` still deserializes as `serde_json::Value`; 2 `any` casts remain in production TSX (`FloatingBar.tsx` safeInvoke args, `Dashboard.tsx` AgentPill cast). `(s as any).current_action` eliminated — `SessionRow.tsx` accesses `session.current_action` directly via typed `AgentSession`. Tauri commands should return typed structs matching the schema.**
 
 ### Planned:
 
@@ -254,8 +256,7 @@ Each item links to its GitHub Issue with full technical specs. Status reflects t
 
 ### Technical Debt:
 
-- [ ] [Replace remaining bare unwrap() (Issue #17)](https://github.com/jomvick/Orbitos-island/issues/17) — 5 production `unwrap()` calls remain: `lib.rs` (2: webview window + default icon — risky), `main.rs` discover mode (1: serde serialization — safe but should use `expect`), `watcher.rs` (2: `s.pid.unwrap()` — guarded by `is_some()` filter but violates guideline). HOME env var fallbacks already migrated from `expect()` to `unwrap_or_else(|_| "/tmp")`.
-- [ ] [Add retry to agentos-hook sender (Issue #18)](https://github.com/jomvick/Orbitos-island/issues/18) — **Zero retry logic.** `sender.rs` `send_event()` connects with 100ms timeout, fails immediately if daemon is unreachable. Transient daemon restarts cause dropped events. Needs: 1-2 retries with 200-500ms backoff. `daemon_client.rs` reconnect already has exponential backoff (500ms→5s, 10 attempts cap) — same pattern should be applied to the hook.
+See remaining open issues at [github.com/jomvick/Orbitos-island/issues](https://github.com/jomvick/Orbitos-island/issues).
 
 ---
 

@@ -3,7 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { useSessionStore } from "../stores/sessionStore";
 import { shouldPlaySound } from "../stores/settingsStore";
-import type { AgentSession, UniversalEvent } from "@agentos/shared-schema";
+import type { AgentSession, UniversalEvent, DaemonEventData } from "@agentos/shared-schema";
 
 interface DaemonCommandResponse<T> {
   data: T;
@@ -11,7 +11,8 @@ interface DaemonCommandResponse<T> {
 
 interface DaemonEventPayload {
   channel: string;
-  data: UniversalEvent | AgentSession | null;
+  data_type: string;
+  data: AgentSession | UniversalEvent | null;
   timestamp: string;
 }
 
@@ -90,12 +91,12 @@ const attemptRef = useRef(0);
         "daemon-event",
         (event) => {
           const payload = event.payload;
-          const raw = payload.data;
-          if (!raw) return;
-
-          const mapped: AgentSession = "id" in raw && "phase" in raw
-            ? raw
-            : {
+          if (payload.data_type === "session") {
+            const session = payload.data as AgentSession;
+            upsertSession(session);
+          } else if (payload.data_type === "event") {
+            const raw = payload.data as UniversalEvent;
+            const mapped: AgentSession = {
                 id: raw.session_id,
                 agent: raw.agent,
                 phase: (() => {
@@ -126,18 +127,16 @@ const attemptRef = useRef(0);
                 current_action: raw.current_action,
               };
 
-          if (!("id" in raw)) {
-            const eventKind = (raw as UniversalEvent).event;
-            if (eventKind === "permission_requested" && shouldPlaySound("permission_request")) {
+            if (shouldPlaySound("permission_request") && raw.event === "permission_requested") {
               invoke("play_sound", { sound: "permission_request" }).catch(() => {});
-            } else if (eventKind === "session_failed" && shouldPlaySound("task_error")) {
+            } else if (shouldPlaySound("task_error") && raw.event === "session_failed") {
               invoke("play_sound", { sound: "task_error" }).catch(() => {});
-            } else if (eventKind === "session_completed" && shouldPlaySound("task_completed")) {
+            } else if (shouldPlaySound("task_completed") && raw.event === "session_completed") {
               invoke("play_sound", { sound: "task_completed" }).catch(() => {});
             }
-          }
 
-          upsertSession(mapped);
+            upsertSession(mapped);
+          }
         },
       );
 
@@ -186,7 +185,6 @@ const attemptRef = useRef(0);
       unlistenEvents?.();
       if (retryRef.current) clearTimeout(retryRef.current);
       if (pingRef.current) clearInterval(pingRef.current);
-      if (refreshRef.current) clearInterval(refreshRef.current);
     };
   }, [
     syncAllSessions,

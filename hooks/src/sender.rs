@@ -5,6 +5,8 @@ use agentos_ipc::{connect_to_daemon, IpcMessage, IpcStatus};
 
 const DAEMON_TIMEOUT: Duration = Duration::from_millis(100);
 const PERMISSION_TIMEOUT: Duration = Duration::from_secs(300);
+const RETRY_DELAY: Duration = Duration::from_millis(50);
+const MAX_RETRIES: u32 = 1;
 
 fn runtime() -> &'static tokio::runtime::Runtime {
     static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
@@ -18,17 +20,27 @@ fn runtime() -> &'static tokio::runtime::Runtime {
 
 pub fn send_event(source: &str, payload: serde_json::Value) -> Result<(), String> {
     runtime().block_on(async {
-        let mut codec = connect_to_daemon(DAEMON_TIMEOUT)
-            .await
-            .map_err(|e| format!("daemon unreachable: {}", e))?;
+        for attempt in 0..=MAX_RETRIES {
+            if attempt > 0 {
+                tokio::time::sleep(RETRY_DELAY).await;
+            }
+            let mut codec = match connect_to_daemon(DAEMON_TIMEOUT).await {
+                Ok(c) => c,
+                Err(e) => {
+                    if attempt < MAX_RETRIES {
+                        continue;
+                    }
+                    return Err(format!("daemon unreachable: {}", e));
+                }
+            };
 
-        let msg = IpcMessage::new_event(source, payload);
-        codec
-            .send(&msg)
-            .await
-            .map_err(|e| format!("send failed: {}", e))?;
-
-        Ok::<(), String>(())
+            let msg = IpcMessage::new_event(source, payload);
+            return codec
+                .send(&msg)
+                .await
+                .map_err(|e| format!("send failed: {}", e));
+        }
+        Err("daemon unreachable: max retries exceeded".to_string())
     })
 }
 
