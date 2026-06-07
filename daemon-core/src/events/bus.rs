@@ -86,8 +86,8 @@ mod tests {
         let mut rx = bus.subscribe();
         let event = sample_event();
 
-        bus.publish(event.clone()).unwrap();
-        let received = rx.try_recv().unwrap();
+        bus.publish(event.clone()).expect("failed to publish event");
+        let received = rx.try_recv().expect("failed to receive event");
         assert_eq!(received.session_id, "test-session");
         assert_eq!(received.agent, AgentKind::Opencode);
     }
@@ -99,9 +99,9 @@ mod tests {
         let mut rx2 = bus.subscribe();
         let event = sample_event();
 
-        bus.publish(event.clone()).unwrap();
-        let r1 = rx1.try_recv().unwrap();
-        let r2 = rx2.try_recv().unwrap();
+        bus.publish(event.clone()).expect("failed to publish event");
+        let r1 = rx1.try_recv().expect("failed to receive event on rx1");
+        let r2 = rx2.try_recv().expect("failed to receive event on rx2");
         assert_eq!(r1.session_id, r2.session_id);
     }
 
@@ -151,7 +151,7 @@ mod tests {
         let mut rx2 = bus.subscribe();
 
         let event = sample_event();
-        bus.publish(event).unwrap();
+        bus.publish(event).expect("failed to publish event");
 
         let e1 = tokio::time::timeout(std::time::Duration::from_secs(1), rx1.recv())
             .await

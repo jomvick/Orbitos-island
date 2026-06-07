@@ -102,7 +102,9 @@ fn main() {
     // Inject pid into the payload if provided via --pid flag.
     if let Some(pid) = cli.pid {
         if let serde_json::Value::Object(ref mut map) = event_value {
-            map.insert("pid".to_string(), serde_json::json!(pid));
+            #[allow(clippy::disallowed_methods)]
+            let v = serde_json::json!(pid);
+            map.insert("pid".to_string(), v);
         }
     }
 
@@ -111,7 +113,9 @@ fn main() {
     if let serde_json::Value::Object(ref mut map) = event_value {
         let ppid = get_parent_pid();
         if ppid != 0 {
-            map.insert("ppid".to_string(), serde_json::json!(ppid));
+            #[allow(clippy::disallowed_methods)]
+            let v = serde_json::json!(ppid);
+            map.insert("ppid".to_string(), v);
         }
     }
 

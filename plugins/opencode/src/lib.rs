@@ -49,7 +49,7 @@ mod tests {
     fn test_parse_session_start() {
         let plugin = OpenCodePlugin;
         let payload = r#"{"type":"session_start","session_id":"abc123","model":"claude-sonnet-4"}"#;
-        let result = plugin.parse(payload).unwrap().unwrap();
+        let result = plugin.parse(payload).expect("parse should succeed").expect("parse result should be valid");
         assert_eq!(result.agent, AgentKind::Opencode);
         assert_eq!(result.event, EventKind::SessionStarted);
         assert_eq!(result.session_id, "abc123");
@@ -59,7 +59,7 @@ mod tests {
     fn test_parse_session_complete() {
         let plugin = OpenCodePlugin;
         let payload = r#"{"type":"session_complete","session_id":"abc123","tokens_input":100,"tokens_output":50}"#;
-        let result = plugin.parse(payload).unwrap().unwrap();
+        let result = plugin.parse(payload).expect("parse should succeed").expect("parse result should be valid");
         assert_eq!(result.event, EventKind::SessionCompleted);
         assert_eq!(result.tokens_input, Some(100));
     }
@@ -75,7 +75,7 @@ mod tests {
     fn test_parse_unknown_fields() {
         let plugin = OpenCodePlugin;
         let payload = r#"{"type":"session_start","unknown_future_field":"x","session_id":"abc"}"#;
-        let result = plugin.parse(payload).unwrap().unwrap();
+        let result = plugin.parse(payload).expect("parse should succeed").expect("parse result should be valid");
         assert_eq!(result.event, EventKind::SessionStarted);
     }
 
@@ -83,7 +83,7 @@ mod tests {
     fn test_parse_missing_optional_fields() {
         let plugin = OpenCodePlugin;
         let payload = r#"{"type":"token_usage","session_id":"abc"}"#;
-        let event = plugin.parse(payload).unwrap().unwrap();
+        let event = plugin.parse(payload).expect("parse should succeed").expect("parse result should be valid");
         assert!(event.tokens_input.is_none());
     }
 

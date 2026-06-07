@@ -46,7 +46,7 @@ mod tests {
     fn test_parse_session_start() {
         let plugin = AntigravityPlugin;
         let payload = r#"{"type":"session_start","session_id":"antigravity-1","model":"test-model"}"#;
-        let result = plugin.parse(payload).unwrap().unwrap();
+        let result = plugin.parse(payload).expect("parse should succeed").expect("parse result should be valid");
         assert_eq!(result.agent, AgentKind::Antigravity);
         assert_eq!(result.event, EventKind::SessionStarted);
     }

@@ -307,7 +307,7 @@ mod tests {
     use uuid::Uuid;
 
     fn test_db() -> Database {
-        Database::open_in_memory().unwrap()
+        Database::open_in_memory().expect("in-memory database should open")
     }
 
     fn sample_session(agent: &str) -> AgentSession {
@@ -345,7 +345,7 @@ mod tests {
     #[test]
     fn test_open_in_memory() {
         let db = test_db();
-        assert_eq!(db.integrity_check().unwrap(), "ok");
+        assert_eq!(db.integrity_check().expect("integrity check should pass"), "ok");
     }
 
     #[test]
@@ -353,9 +353,9 @@ mod tests {
         let db = test_db();
         let session = sample_session("opencode");
 
-        db.upsert_session(&session).unwrap();
+        db.upsert_session(&session).expect("should upsert session");
 
-        let sessions = db.get_all_sessions(10).unwrap();
+        let sessions = db.get_all_sessions(10).expect("should get all sessions");
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].agent, "opencode");
         assert_eq!(sessions[0].cwd.as_deref(), Some("/project"));
@@ -366,12 +366,12 @@ mod tests {
         let db = test_db();
         let mut session = sample_session("claude");
         session.id = "fixed-id".to_string();
-        db.upsert_session(&session).unwrap();
+        db.upsert_session(&session).expect("should upsert session");
 
         session.tokens_input = 9999;
-        db.upsert_session(&session).unwrap();
+        db.upsert_session(&session).expect("should upsert updated session");
 
-        let sessions = db.get_all_sessions(10).unwrap();
+        let sessions = db.get_all_sessions(10).expect("should get all sessions");
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].tokens_input, 9999);
     }
@@ -385,11 +385,11 @@ mod tests {
         let mut failed = sample_session("codex");
         failed.phase = daemon_core::state::SessionPhase::Failed;
 
-        db.upsert_session(&running).unwrap();
-        db.upsert_session(&completed).unwrap();
-        db.upsert_session(&failed).unwrap();
+        db.upsert_session(&running).expect("should upsert running session");
+        db.upsert_session(&completed).expect("should upsert completed session");
+        db.upsert_session(&failed).expect("should upsert failed session");
 
-        let active = db.get_active_sessions().unwrap();
+        let active = db.get_active_sessions().expect("should get active sessions");
         assert_eq!(active.len(), 1);
         assert_eq!(active[0].agent, "opencode");
     }
@@ -398,7 +398,7 @@ mod tests {
     fn test_insert_event() {
         let db = test_db();
         let session = sample_session("opencode");
-        db.upsert_session(&session).unwrap();
+        db.upsert_session(&session).expect("should upsert session");
 
         let event = UniversalEvent {
             id: Uuid::new_v4(),
@@ -426,8 +426,8 @@ mod tests {
             timestamp: chrono::Utc::now(),
         };
 
-        db.insert_event(&event).unwrap();
-        let timeline = db.get_timeline(10, 0, None, None).unwrap();
+        db.insert_event(&event).expect("should insert event");
+        let timeline = db.get_timeline(10, 0, None, None).expect("should get timeline");
         assert_eq!(timeline.len(), 1);
         assert_eq!(timeline[0].agent, "opencode");
     }
@@ -438,7 +438,7 @@ mod tests {
         let session_id = Uuid::new_v4().to_string();
         let mut session = sample_session("opencode");
         session.id.clone_from(&session_id);
-        db.upsert_session(&session).unwrap();
+        db.upsert_session(&session).expect("should upsert session");
 
         let event = UniversalEvent {
             id: Uuid::new_v4(),
@@ -466,17 +466,17 @@ mod tests {
             timestamp: chrono::Utc::now(),
         };
 
-        db.insert_event(&event).unwrap();
-        db.insert_event(&event).unwrap();
+        db.insert_event(&event).expect("should insert first event");
+        db.insert_event(&event).expect("should insert duplicate event (ignored)");
 
-        let timeline = db.get_timeline(10, 0, None, None).unwrap();
+        let timeline = db.get_timeline(10, 0, None, None).expect("should get timeline");
         assert_eq!(timeline.len(), 1);
     }
 
     #[test]
     fn test_analytics_empty_database() {
         let db = test_db();
-        let stats = db.get_session_stats().unwrap();
+        let stats = db.get_session_stats().expect("should get session stats");
         assert_eq!(stats.total_sessions, 0);
         assert_eq!(stats.active_count, 0);
         assert_eq!(stats.total_tokens, 0);

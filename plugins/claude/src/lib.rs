@@ -50,7 +50,7 @@ mod tests {
     fn test_parse_task_complete() {
         let plugin = ClaudePlugin;
         let payload = r#"{"type":"task_complete","session_id":"sess1","tokens_input":5000,"tokens_output":2000}"#;
-        let result = plugin.parse(payload).unwrap().unwrap();
+        let result = plugin.parse(payload).expect("parse should succeed").expect("parse result should be valid");
         assert_eq!(result.agent, AgentKind::Claude);
         assert_eq!(result.event, EventKind::SessionCompleted);
         assert_eq!(result.tokens_input, Some(5000));
@@ -60,7 +60,7 @@ mod tests {
     fn test_parse_permission_request() {
         let plugin = ClaudePlugin;
         let payload = r#"{"type":"permission_request","session_id":"sess1","permission":{"command":"sudo apt install","description":"Install package"}}"#;
-        let result = plugin.parse(payload).unwrap().unwrap();
+        let result = plugin.parse(payload).expect("parse should succeed").expect("parse result should be valid");
         assert_eq!(result.event, EventKind::PermissionRequested);
         assert!(result.permission.is_some());
     }
@@ -69,7 +69,7 @@ mod tests {
     fn test_parse_unknown_fields() {
         let plugin = ClaudePlugin;
         let payload = r#"{"type":"session_start","unknown_future_field":"x","session_id":"abc"}"#;
-        let result = plugin.parse(payload).unwrap().unwrap();
+        let result = plugin.parse(payload).expect("parse should succeed").expect("parse result should be valid");
         assert_eq!(result.agent, AgentKind::Claude);
         assert_eq!(result.event, EventKind::SessionStarted);
     }
@@ -78,7 +78,7 @@ mod tests {
     fn test_parse_missing_optional_fields() {
         let plugin = ClaudePlugin;
         let payload = r#"{"type":"token_usage","session_id":"abc"}"#;
-        let event = plugin.parse(payload).unwrap().unwrap();
+        let event = plugin.parse(payload).expect("parse should succeed").expect("parse result should be valid");
         assert!(event.tokens_input.is_none());
         assert!(event.tokens_output.is_none());
     }

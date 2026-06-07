@@ -142,6 +142,7 @@ fn install_claude_hooks(_cfg: &AgentConfig) -> Result<bool, String> {
     let hook_binary = find_binary("agentos-hook")
         .unwrap_or_else(|| "agentos-hook".to_string());
 
+    #[allow(clippy::disallowed_methods)]
     let hooks = serde_json::json!({
         "UserPromptSubmit": [{ "matcher": "*", "hooks": [{ "type": "command", "command": format!("{} --source claude", hook_binary), "timeout": 5 }] }],
         "SessionStart": [{ "matcher": "*", "hooks": [{ "type": "command", "command": format!("{} --source claude", hook_binary), "timeout": 5 }] }],
@@ -189,12 +190,16 @@ fn install_opencode_hooks(_cfg: &AgentConfig) -> Result<bool, String> {
             .as_array_mut()
             .map(|arr| {
                 if !arr.iter().any(|p| p.as_str() == Some(&plugin_uri)) {
-                    arr.push(serde_json::json!(plugin_uri));
+                    #[allow(clippy::disallowed_methods)]
+                    let v = serde_json::json!(plugin_uri);
+                    arr.push(v);
                 }
             });
 
         if plugins.is_none() {
-            config["plugin"] = serde_json::json!([plugin_uri]);
+            #[allow(clippy::disallowed_methods)]
+            let v = serde_json::json!([plugin_uri]);
+            config["plugin"] = v;
         }
 
         write_json_file(&config_path, &config)?;
@@ -495,7 +500,7 @@ mod tests {
 
     #[test]
     fn test_expand_home() {
-        let home = std::env::var("HOME").unwrap();
+        let home = std::env::var("HOME").expect("HOME should be set");
         let expanded = expand_home("~/.claude/settings.json");
         assert!(expanded.to_string_lossy().contains(&home));
         assert!(expanded.to_string_lossy().ends_with(".claude/settings.json"));
@@ -524,12 +529,12 @@ mod tests {
 
         // First injection
         inject_into_rc(&tmp, &content, marker);
-        let after_first = std::fs::read_to_string(&tmp).unwrap();
+        let after_first = std::fs::read_to_string(&tmp).expect("should read tmp file");
         assert!(after_first.contains(marker));
 
         // Second injection — must be idempotent (no duplicate)
         inject_into_rc(&tmp, &content, marker);
-        let after_second = std::fs::read_to_string(&tmp).unwrap();
+        let after_second = std::fs::read_to_string(&tmp).expect("should read tmp file again");
         assert_eq!(
             after_second.matches(marker).count(),
             1,

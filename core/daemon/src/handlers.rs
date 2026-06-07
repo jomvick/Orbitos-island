@@ -201,7 +201,11 @@ pub async fn handle_jump_to_session(codec: &mut BridgeCodec, id: Uuid, session_i
                     let _ = codec
                         .send(&IpcMessage::new_response(
                             id,
-                            Some(serde_json::json!({"status": "focused"})),
+                            Some({
+                                #[allow(clippy::disallowed_methods)]
+                                let v = serde_json::json!({"status": "focused"});
+                                v
+                            }),
                         ))
                         .await;
                 }
@@ -270,10 +274,14 @@ pub async fn handle_resolve_permission(codec: &mut BridgeCodec, id: Uuid, permis
                 diff: None,
                 error: None,
                 current_action: None,
-                metadata: Some(serde_json::json!({
-                    "resolved_by": "user",
-                    "approved": approved
-                })),
+                metadata: Some({
+                    #[allow(clippy::disallowed_methods)]
+                    let v = serde_json::json!({
+                        "resolved_by": "user",
+                        "approved": approved
+                    });
+                    v
+                }),
                 pid: None,
                 ppid: None,
                 timestamp: chrono::Utc::now(),
@@ -301,7 +309,11 @@ pub async fn handle_resolve_permission(codec: &mut BridgeCodec, id: Uuid, permis
             let _ = codec
                 .send(&IpcMessage::new_response(
                     id,
-                    Some(serde_json::json!({"status": "resolved", "session_id": sid})),
+                    Some({
+                        #[allow(clippy::disallowed_methods)]
+                        let v = serde_json::json!({"status": "resolved", "session_id": sid});
+                        v
+                    }),
                 ))
                 .await;
         }
@@ -352,10 +364,14 @@ pub async fn handle_answer_question(codec: &mut BridgeCodec, id: Uuid, question_
                 diff: None,
                 error: None,
 current_action: None,
-                metadata: Some(serde_json::json!({
-                    "resolved_by": "user",
-                    "answer": answer
-                })),
+                metadata: Some({
+                    #[allow(clippy::disallowed_methods)]
+                    let v = serde_json::json!({
+                        "resolved_by": "user",
+                        "answer": answer
+                    });
+                    v
+                }),
                 pid: None,
                 ppid: None,
                 timestamp: chrono::Utc::now(),
@@ -395,7 +411,11 @@ current_action: None,
             let _ = codec
                 .send(&IpcMessage::new_response(
                     id,
-                    Some(serde_json::json!({"status": "resolved", "session_id": sid})),
+                    Some({
+                        #[allow(clippy::disallowed_methods)]
+                        let v = serde_json::json!({"status": "resolved", "session_id": sid});
+                        v
+                    }),
                 ))
                 .await;
         }
@@ -437,9 +457,13 @@ pub async fn handle_stop_agent(codec: &mut BridgeCodec, id: Uuid, session_id: St
             diff: None,
             error: Some("stopped by user".to_string()),
             current_action: None,
-            metadata: Some(serde_json::json!({
-                "stopped_by": "user"
-            })),
+            metadata: Some({
+                #[allow(clippy::disallowed_methods)]
+                let v = serde_json::json!({
+                    "stopped_by": "user"
+                });
+                v
+            }),
                 pid: None,
                 ppid: None,
                 timestamp: chrono::Utc::now(),
@@ -461,7 +485,11 @@ pub async fn handle_stop_agent(codec: &mut BridgeCodec, id: Uuid, session_id: St
         let _ = codec
             .send(&IpcMessage::new_response(
                 id,
-                Some(serde_json::json!({"status": "stopped", "session_id": session_id})),
+                Some({
+                    #[allow(clippy::disallowed_methods)]
+                    let v = serde_json::json!({"status": "stopped", "session_id": session_id});
+                    v
+                }),
             ))
             .await;
     } else {

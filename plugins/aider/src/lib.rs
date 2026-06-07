@@ -50,7 +50,7 @@ mod tests {
         let plugin = AiderPlugin;
         let payload =
             r#"{"type":"session_start","session_id":"aider-1","model":"claude-sonnet-4"}"#;
-        let result = plugin.parse(payload).unwrap().unwrap();
+        let result = plugin.parse(payload).expect("parse should succeed").expect("parse result should be valid");
         assert_eq!(result.agent, AgentKind::Aider);
         assert_eq!(result.event, EventKind::SessionStarted);
     }
@@ -59,7 +59,7 @@ mod tests {
     fn test_parse_task_complete() {
         let plugin = AiderPlugin;
         let payload = r#"{"type":"complete","session_id":"aider-1","tokens_input":3000,"tokens_output":1500}"#;
-        let result = plugin.parse(payload).unwrap().unwrap();
+        let result = plugin.parse(payload).expect("parse should succeed").expect("parse result should be valid");
         assert_eq!(result.event, EventKind::SessionCompleted);
         assert_eq!(result.tokens_input, Some(3000));
     }

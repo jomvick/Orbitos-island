@@ -57,7 +57,7 @@ pub async fn start_process_watcher(state: Arc<DaemonState>) {
                             | SessionPhase::Paused
                     ) && s.pid.is_some()
                 })
-                .map(|s| (s.id.clone(), s.pid.unwrap(), s.agent.clone()))
+                .map(|s| (s.id.clone(), s.pid.expect("tracked session should have a PID"), s.agent.clone()))
                 .collect()
         };
 
@@ -136,7 +136,7 @@ mod tests {
         use chrono::Utc;
         use tokio::sync::Mutex;
 
-        let db = Arc::new(Mutex::new(Database::open_in_memory().unwrap()));
+        let db = Arc::new(Mutex::new(Database::open_in_memory().expect("in-memory database should open")));
         let registry = crate::plugin_loader::load_default_plugins();
         let state = Arc::new(DaemonState::new(registry, Some(db)));
 
@@ -184,7 +184,7 @@ mod tests {
             s.sessions
                 .values()
                 .filter(|s| s.pid.is_some())
-                .map(|s| (s.id.clone(), s.pid.unwrap(), s.agent.clone()))
+                .map(|s| (s.id.clone(), s.pid.expect("tracked session should have a PID"), s.agent.clone()))
                 .collect()
         };
 
@@ -217,7 +217,7 @@ mod tests {
 
         // Verify session transitioned to Completed.
         let ss = state.session_state.read().await;
-        let final_session = ss.sessions.get("watcher-test-session").unwrap();
+        let final_session = ss.sessions.get("watcher-test-session").expect("test session should exist");
         assert_eq!(final_session.phase, SessionPhase::Completed);
     }
 }

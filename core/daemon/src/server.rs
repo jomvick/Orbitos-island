@@ -167,9 +167,15 @@ pub async fn handle_client(mut codec: BridgeCodec, state: Arc<DaemonState>) {
                     .await
                     {
                         Ok(Ok(PermissionAction::Allow)) => {
-                            serde_json::json!({"action": "allow"})
+                            #[allow(clippy::disallowed_methods)]
+                            let r = serde_json::json!({"action": "allow"});
+                            r
                         }
-                        _ => serde_json::json!({"action": "deny", "reason": "timeout"}),
+                        _ => {
+                            #[allow(clippy::disallowed_methods)]
+                            let r = serde_json::json!({"action": "deny", "reason": "timeout"});
+                            r
+                        },
                     };
 
                     let _ = codec
@@ -213,14 +219,22 @@ pub async fn handle_client(mut codec: BridgeCodec, state: Arc<DaemonState>) {
                     )
                     .await
                     {
-                        Ok(Ok(answer)) => serde_json::json!({
-                            "selected_index": answer.index,
-                            "label": answer.label,
-                        }),
-                        _ => serde_json::json!({
-                            "selected_index": 1,
-                            "label": "timeout_default",
-                        }),
+                        Ok(Ok(answer)) => {
+                            #[allow(clippy::disallowed_methods)]
+                            let r = serde_json::json!({
+                                "selected_index": answer.index,
+                                "label": answer.label,
+                            });
+                            r
+                        }
+                        _ => {
+                            #[allow(clippy::disallowed_methods)]
+                            let r = serde_json::json!({
+                                "selected_index": 1,
+                                "label": "timeout_default",
+                            });
+                            r
+                        },
                     };
 
                     let _ = codec
@@ -388,7 +402,7 @@ mod tests {
         let socket_path = dir.join("e2e.sock");
         let _ = std::fs::remove_file(&socket_path);
 
-        let db = Database::open_in_memory().unwrap();
+        let db = Database::open_in_memory().expect("in-memory database should open");
         let plugin_registry = plugin_loader::load_default_plugins();
         let db_arc = Arc::new(Mutex::new(db));
         let state = Arc::new(DaemonState::new(plugin_registry, Some(db_arc)));
@@ -397,7 +411,7 @@ mod tests {
             path: socket_path.clone(),
             max_connections: 8,
         };
-        let server = IpcServer::bind(config).unwrap();
+        let server = IpcServer::bind(config).expect("server should bind");
         let server_path = server.local_path().to_path_buf();
         let state_clone = state.clone();
 
@@ -412,10 +426,11 @@ mod tests {
 
         tokio::time::sleep(Duration::from_millis(100)).await;
 
-        let stream = UnixStream::connect(&server_path).await.unwrap();
+        let stream = UnixStream::connect(&server_path).await.expect("should connect to server");
         let (read, write) = stream.into_split();
         let mut client = BridgeCodec::new(read, write);
 
+        #[allow(clippy::disallowed_methods)]
         let payload = serde_json::json!({
             "type": "session_start",
             "session_id": "e2e-test-session",
@@ -425,15 +440,15 @@ mod tests {
         client
             .send(&IpcMessage::new_event("opencode", payload))
             .await
-            .unwrap();
+            .expect("should send session start event");
 
         tokio::time::sleep(Duration::from_millis(200)).await;
 
         let cmd = IpcMessage::new_command(IpcCommand::GetSessions { filter: None });
-        client.send(&cmd).await.unwrap();
+        client.send(&cmd).await.expect("should send GetSessions command");
 
         let response = loop {
-            match client.recv().await.unwrap() {
+            match client.recv().await.expect("should receive response") {
                 IpcMessage::SubscriptionEvent { .. } => continue,
                 other => break other,
             }
@@ -442,7 +457,7 @@ mod tests {
             IpcMessage::Response { status, data, .. } => {
                 assert_eq!(status, IpcStatus::Ok);
                 let sessions: Vec<serde_json::Value> =
-                    serde_json::from_value(data.unwrap()).unwrap();
+                    serde_json::from_value(data.expect("response should have data")).expect("should deserialize sessions");
                 assert_eq!(sessions.len(), 1, "expected 1 session");
                 assert_eq!(sessions[0]["id"], "e2e-test-session");
                 assert_eq!(sessions[0]["agent"], "opencode");
@@ -467,7 +482,7 @@ mod tests {
         let socket_path = dir.join("malformed.sock");
         let _ = std::fs::remove_file(&socket_path);
 
-        let db = Database::open_in_memory().unwrap();
+        let db = Database::open_in_memory().expect("in-memory database should open");
         let plugin_registry = plugin_loader::load_default_plugins();
         let state = Arc::new(DaemonState::new(plugin_registry, Some(Arc::new(Mutex::new(db)))));
 
@@ -475,7 +490,7 @@ mod tests {
             path: socket_path.clone(),
             max_connections: 4,
         };
-        let server = IpcServer::bind(config).unwrap();
+        let server = IpcServer::bind(config).expect("server should bind");
         let server_path = server.local_path().to_path_buf();
         let state_clone = state.clone();
 
@@ -489,27 +504,27 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
 
         // Connect a raw stream to inject garbage bytes directly.
-        let stream = tokio::net::UnixStream::connect(&server_path).await.unwrap();
+        let stream = tokio::net::UnixStream::connect(&server_path).await.expect("should connect to server");
         let (_read_half, mut write_half) = stream.into_split();
 
         // Send malformed JSON — this must not crash the server.
-        write_half.write_all(b"not json at all\n").await.unwrap();
-        write_half.flush().await.unwrap();
+        write_half.write_all(b"not json at all\n").await.expect("should write malformed data");
+        write_half.flush().await.expect("should flush write half");
 
         // Wait briefly for the server to process and drop/ignore the bad message.
         tokio::time::sleep(Duration::from_millis(100)).await;
 
         // Now open a fresh connection and send a valid Ping — the server must still respond.
-        let stream2 = tokio::net::UnixStream::connect(&server_path).await.unwrap();
+        let stream2 = tokio::net::UnixStream::connect(&server_path).await.expect("should reconnect to server");
         let (read2, write2) = stream2.into_split();
         let mut client2 = BridgeCodec::new(read2, write2);
 
         let ping_msg = IpcMessage::new_command(IpcCommand::Ping);
-        client2.send(&ping_msg).await.unwrap();
+        client2.send(&ping_msg).await.expect("should send Ping command");
 
         let response = tokio::time::timeout(Duration::from_secs(2), async {
             loop {
-                match client2.recv().await.unwrap() {
+                match client2.recv().await.expect("should receive Ping response") {
                     IpcMessage::SubscriptionEvent { .. } => continue,
                     other => break other,
                 }

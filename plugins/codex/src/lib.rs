@@ -47,7 +47,7 @@ mod tests {
     fn test_parse_prompt_submit() {
         let plugin = CodexPlugin;
         let payload = r#"{"type":"prompt_submit","session_id":"codex-1","model":"gpt-4"}"#;
-        let result = plugin.parse(payload).unwrap().unwrap();
+        let result = plugin.parse(payload).expect("parse should succeed").expect("parse result should be valid");
         assert_eq!(result.agent, AgentKind::Codex);
         assert_eq!(result.event, EventKind::SessionStarted);
     }

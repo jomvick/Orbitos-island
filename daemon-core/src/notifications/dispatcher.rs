@@ -171,15 +171,15 @@ mod tests {
                 description: "test description".to_string(),
                 context: None,
                 diff: None,
-                created_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
-                expires_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 5, 0).unwrap(),
+                created_at:         Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).single().expect("valid datetime"),
+                expires_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 5, 0).single().expect("valid datetime"),
             }),
             question: has_question.then(|| QuestionPrompt {
                 id: Uuid::new_v4(),
                 question: "Continue?".to_string(),
                 options: vec!["yes".to_string(), "no".to_string()],
                 context: None,
-                created_at: Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap(),
+                created_at:         Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).single().expect("valid datetime"),
             }),
             jump_target: None,
             plan: None,
@@ -205,7 +205,7 @@ mod tests {
             (None, None),
             None,
         );
-        let n = event_to_notification(&event).unwrap();
+        let n = event_to_notification(&event).expect("failed to convert event to notification");
         assert_eq!(n.title, "opencode started");
         assert_eq!(n.priority, NotificationPriority::Low);
         assert_eq!(n.category, NotificationCategory::Info);
@@ -223,7 +223,7 @@ mod tests {
             (Some(5000), Some(2000)),
             Some(120000),
         );
-        let n = event_to_notification(&event).unwrap();
+        let n = event_to_notification(&event).expect("failed to convert event to notification");
         assert_eq!(n.title, "claude completed");
         assert_eq!(n.priority, NotificationPriority::Normal);
         assert_eq!(n.category, NotificationCategory::TaskComplete);
@@ -241,7 +241,7 @@ mod tests {
             (None, None),
             None,
         );
-        let n = event_to_notification(&event).unwrap();
+        let n = event_to_notification(&event).expect("failed to convert event to notification");
         assert_eq!(n.title, "codex failed");
         assert_eq!(n.priority, NotificationPriority::High);
         assert_eq!(n.category, NotificationCategory::Error);
@@ -260,7 +260,7 @@ mod tests {
             (None, None),
             None,
         );
-        let n = event_to_notification(&event).unwrap();
+        let n = event_to_notification(&event).expect("failed to convert event to notification");
         assert_eq!(n.title, "opencode needs permission");
         assert_eq!(n.priority, NotificationPriority::Urgent);
         assert_eq!(n.category, NotificationCategory::PermissionRequest);
@@ -279,7 +279,7 @@ mod tests {
             (None, None),
             None,
         );
-        let n = event_to_notification(&event).unwrap();
+        let n = event_to_notification(&event).expect("failed to convert event to notification");
         assert!(n.title.contains("asks"));
         assert_eq!(n.priority, NotificationPriority::High);
         assert!(n.actionable);
@@ -337,7 +337,7 @@ mod tests {
             &SessionPhase::Running,
             &SessionPhase::Failed,
         )
-        .unwrap();
+        .expect("phase_to_notification should return Some for failed");
         assert_eq!(n.title, "opencode failed");
         assert_eq!(n.priority, NotificationPriority::High);
     }
@@ -349,7 +349,7 @@ mod tests {
             &SessionPhase::Running,
             &SessionPhase::Completed,
         )
-        .unwrap();
+        .expect("phase_to_notification should return Some for completed");
         assert_eq!(n.title, "opencode completed");
         assert_eq!(n.priority, NotificationPriority::Normal);
     }
@@ -376,7 +376,7 @@ mod tests {
             (None, None),
             None,
         );
-        let n = event_to_notification(&event).unwrap();
+        let n = event_to_notification(&event).expect("failed to convert event to notification");
         assert_eq!(n.title, "antigravity started");
         assert_eq!(n.body, "");
     }
@@ -393,7 +393,7 @@ mod tests {
             (None, None),
             Some(45000),
         );
-        let n = event_to_notification(&event).unwrap();
+        let n = event_to_notification(&event).expect("failed to convert event to notification");
         assert!(n.body.contains("45.0s"));
     }
 

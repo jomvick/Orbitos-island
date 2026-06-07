@@ -49,7 +49,7 @@ mod tests {
     fn test_parse_session_start() {
         let plugin = CopilotPlugin;
         let payload = r#"{"type":"session_start","session_id":"copilot-1","model":"test-model"}"#;
-        let result = plugin.parse(payload).unwrap().unwrap();
+        let result = plugin.parse(payload).expect("parse should succeed").expect("parse result should be valid");
         assert_eq!(result.agent, AgentKind::Copilot);
         assert_eq!(result.event, EventKind::SessionStarted);
     }

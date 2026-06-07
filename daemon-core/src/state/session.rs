@@ -191,7 +191,7 @@ mod tests {
         let state = apply_event(state, event);
 
         assert_eq!(state.sessions.len(), 1);
-        let session = state.sessions.get("sess-1").unwrap();
+        let session = state.sessions.get("sess-1").expect("session should exist");
         assert_eq!(session.agent, AgentKind::Opencode);
         assert_eq!(session.phase, SessionPhase::Running);
         assert_eq!(session.cwd.as_deref(), Some("/test"));
@@ -214,7 +214,7 @@ mod tests {
         };
         let state = apply_event(state, complete);
 
-        let session = state.sessions.get("sess-1").unwrap();
+        let session = state.sessions.get("sess-1").expect("session should exist");
         assert_eq!(session.phase, SessionPhase::Completed);
         assert_eq!(session.tokens_input, 5000);
         assert_eq!(session.tokens_output, 2000);
@@ -233,7 +233,7 @@ mod tests {
         };
         let state = apply_event(state, fail);
 
-        let session = state.sessions.get("sess-1").unwrap();
+        let session = state.sessions.get("sess-1").expect("session should exist");
         assert_eq!(session.phase, SessionPhase::Failed);
         assert_eq!(session.error.as_deref(), Some("connection lost"));
     }
@@ -262,10 +262,10 @@ mod tests {
         };
         let state = apply_event(state, perm);
 
-        let session = state.sessions.get("sess-1").unwrap();
+        let session = state.sessions.get("sess-1").expect("session should exist");
         assert_eq!(session.phase, SessionPhase::WaitingPermission);
         assert!(session.permission.is_some());
-        assert_eq!(session.permission.as_ref().unwrap().command, "git push");
+        assert_eq!(session.permission.as_ref().expect("permission should exist").command, "git push");
     }
 
     #[test]
@@ -286,10 +286,10 @@ mod tests {
         };
         let state = apply_event(state, question);
 
-        let session = state.sessions.get("sess-1").unwrap();
+        let session = state.sessions.get("sess-1").expect("session should exist");
         assert_eq!(session.phase, SessionPhase::WaitingQuestion);
-        assert_eq!(session.question.as_ref().unwrap().question, "Continue?");
-        assert_eq!(session.question.as_ref().unwrap().options.len(), 2);
+        assert_eq!(session.question.as_ref().expect("question should exist").question, "Continue?");
+        assert_eq!(session.question.as_ref().expect("question should exist").options.len(), 2);
     }
 
     #[test]
@@ -323,7 +323,7 @@ mod tests {
         );
         let state = apply_event(state, resolve);
 
-        let session = state.sessions.get("sess-1").unwrap();
+        let session = state.sessions.get("sess-1").expect("session should exist");
         assert_eq!(session.phase, SessionPhase::Running);
         assert!(session.permission.is_none());
         assert!(session.question.is_none());
@@ -350,7 +350,7 @@ mod tests {
 
         assert_eq!(state.active_count(), 2);
         assert_eq!(
-            state.sessions.get("sess-2").unwrap().phase,
+            state.sessions.get("sess-2").expect("session should exist").phase,
             SessionPhase::Completed
         );
     }
@@ -370,7 +370,7 @@ mod tests {
         };
         let state = apply_event(state, activity);
 
-        let session = state.sessions.get("sess-1").unwrap();
+        let session = state.sessions.get("sess-1").expect("session should exist");
         assert_eq!(session.cwd.as_deref(), Some("/new/path"));
         assert_eq!(session.branch.as_deref(), Some("feature/new"));
         assert_eq!(session.model.as_deref(), Some("claude-4"));
@@ -389,7 +389,7 @@ mod tests {
         let heartbeat = make_event("sess-1", EventKind::Heartbeat, AgentKind::Opencode);
         let state = apply_event(state, heartbeat);
 
-        let session = state.sessions.get("sess-1").unwrap();
+        let session = state.sessions.get("sess-1").expect("session should exist");
         assert!(session.last_heartbeat > session.created_at);
         assert_eq!(session.phase, SessionPhase::Running);
     }
@@ -403,7 +403,7 @@ mod tests {
         let pause = make_event("sess-1", EventKind::SessionPaused, AgentKind::Antigravity);
         let state = apply_event(state, pause);
 
-        let session = state.sessions.get("sess-1").unwrap();
+        let session = state.sessions.get("sess-1").expect("session should exist");
         assert_eq!(session.phase, SessionPhase::Paused);
         assert!(!session.is_active());
     }
@@ -426,7 +426,7 @@ mod tests {
         };
         let state = apply_event(state, tokens);
 
-        let session = state.sessions.get("sess-1").unwrap();
+        let session = state.sessions.get("sess-1").expect("session should exist");
         assert_eq!(session.tokens_input, 1000);
         assert_eq!(session.tokens_output, 500);
     }
@@ -449,9 +449,9 @@ mod tests {
         };
         let state = apply_event(state, jump);
 
-        let session = state.sessions.get("sess-1").unwrap();
+        let session = state.sessions.get("sess-1").expect("session should exist");
         assert!(session.jump_target.is_some());
-        assert_eq!(session.jump_target.as_ref().unwrap().pid, Some(12345));
+        assert_eq!(session.jump_target.as_ref().expect("jump_target should exist").pid, Some(12345));
     }
 
     #[test]
@@ -483,7 +483,7 @@ mod tests {
         let event = make_event("sess-1", EventKind::SessionStarted, AgentKind::Opencode);
         let mut state = apply_event(state, event);
 
-        let session = state.sessions.get_mut("sess-1").unwrap();
+        let session = state.sessions.get_mut("sess-1").expect("session should exist");
         session.last_heartbeat = Utc::now() - chrono::Duration::minutes(10);
 
         assert!(session.is_stale(&chrono::Duration::minutes(5)));
@@ -557,7 +557,7 @@ mod tests {
 
         let state = events.into_iter().fold(state, apply_event);
 
-        let session = state.sessions.get("sess-1").unwrap();
+        let session = state.sessions.get("sess-1").expect("session should exist");
         assert_eq!(session.phase, SessionPhase::Completed);
         assert_eq!(session.tokens_input, 5000);
         assert_eq!(session.tokens_output, 2000);
@@ -596,10 +596,10 @@ mod tests {
         };
         let state = apply_event(state, proposed);
 
-        let session = state.sessions.get("sess-1").unwrap();
+        let session = state.sessions.get("sess-1").expect("session should exist");
         assert!(session.plan.is_some());
-        assert_eq!(session.plan.as_ref().unwrap().summary, "Refactor auth module");
-        assert_eq!(session.plan.as_ref().unwrap().items.len(), 2);
+        assert_eq!(session.plan.as_ref().expect("plan should exist").summary, "Refactor auth module");
+        assert_eq!(session.plan.as_ref().expect("plan should exist").items.len(), 2);
     }
 
     #[test]
@@ -621,11 +621,11 @@ mod tests {
             ..make_event("sess-1", EventKind::PlanProposed, AgentKind::Claude)
         };
         let state = apply_event(state, proposed);
-        assert!(state.sessions.get("sess-1").unwrap().plan.is_some());
+        assert!(state.sessions.get("sess-1").expect("session should exist").plan.is_some());
 
         let approved = make_event("sess-1", EventKind::PlanApproved, AgentKind::Claude);
         let state = apply_event(state, approved);
-        assert!(state.sessions.get("sess-1").unwrap().plan.is_none());
+        assert!(state.sessions.get("sess-1").expect("session should exist").plan.is_none());
     }
 
     #[test]
@@ -653,10 +653,10 @@ mod tests {
         };
         let state = apply_event(state, available);
 
-        let session = state.sessions.get("sess-1").unwrap();
+        let session = state.sessions.get("sess-1").expect("session should exist");
         assert!(session.diff.is_some());
-        assert_eq!(session.diff.as_ref().unwrap().files.len(), 1);
-        assert_eq!(session.diff.as_ref().unwrap().files[0].file_path, "src/main.rs");
+        assert_eq!(session.diff.as_ref().expect("diff should exist").files.len(), 1);
+        assert_eq!(session.diff.as_ref().expect("diff should exist").files[0].file_path, "src/main.rs");
     }
 
     #[test]
@@ -678,11 +678,11 @@ mod tests {
             ..make_event("sess-1", EventKind::DiffAvailable, AgentKind::Codex)
         };
         let state = apply_event(state, available);
-        assert!(state.sessions.get("sess-1").unwrap().diff.is_some());
+        assert!(state.sessions.get("sess-1").expect("session should exist").diff.is_some());
 
         let applied = make_event("sess-1", EventKind::DiffApplied, AgentKind::Codex);
         let state = apply_event(state, applied);
-        assert!(state.sessions.get("sess-1").unwrap().diff.is_none());
+        assert!(state.sessions.get("sess-1").expect("session should exist").diff.is_none());
     }
 
     #[test]
@@ -720,11 +720,11 @@ mod tests {
         let state = apply_event(state, question);
 
         assert_eq!(
-            state.sessions.get("proj-api").unwrap().phase,
+            state.sessions.get("proj-api").expect("session should exist").phase,
             SessionPhase::WaitingQuestion
         );
         assert_eq!(
-            state.sessions.get("proj-web").unwrap().phase,
+            state.sessions.get("proj-web").expect("session should exist").phase,
             SessionPhase::Running
         );
 
@@ -738,7 +738,7 @@ mod tests {
         let state = apply_event(state, complete);
 
         assert_eq!(
-            state.sessions.get("proj-web").unwrap().phase,
+            state.sessions.get("proj-web").expect("session should exist").phase,
             SessionPhase::Completed
         );
         assert_eq!(state.active_count(), 1);
@@ -757,7 +757,7 @@ mod tests {
             ..make_event("s-1", EventKind::SessionCompleted, AgentKind::Claude)
         };
         let state = apply_event(state, complete);
-        assert_eq!(state.sessions.get("s-1").unwrap().phase, SessionPhase::Completed);
+        assert_eq!(state.sessions.get("s-1").expect("session should exist").phase, SessionPhase::Completed);
 
         let late = UniversalEvent {
             tokens_input: None,
@@ -766,7 +766,7 @@ mod tests {
         };
         let state = apply_event(state, late);
 
-        let session = state.sessions.get("s-1").unwrap();
+        let session = state.sessions.get("s-1").expect("session should exist");
         assert_eq!(session.phase, SessionPhase::Completed);
     }
 
@@ -804,7 +804,7 @@ mod tests {
         };
         let state = apply_event(state, t2);
 
-        let session = state.sessions.get("s-1").unwrap();
+        let session = state.sessions.get("s-1").expect("session should exist");
         assert_eq!(session.tokens_input, 300);
         assert_eq!(session.tokens_output, 150);
     }
@@ -832,7 +832,7 @@ mod tests {
         let resolve = make_event("s-1", EventKind::ActionableStateResolved, AgentKind::Opencode);
         let state = apply_event(state, resolve);
 
-        let session = state.sessions.get("s-1").unwrap();
+        let session = state.sessions.get("s-1").expect("session should exist");
         assert!(session.permission.is_none());
         assert_eq!(session.phase, SessionPhase::Running);
     }
@@ -855,7 +855,7 @@ mod tests {
         state = apply_event(state, complete);
 
         {
-            let session = state.sessions.get_mut("orphan").unwrap();
+            let session = state.sessions.get_mut("orphan").expect("session should exist");
             session.updated_at = Utc::now() - chrono::Duration::hours(2);
         }
 

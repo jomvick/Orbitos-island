@@ -27,7 +27,7 @@ async fn main() {
 
     if args.discover {
         let result = discover::discover_agents();
-        println!("{}", serde_json::to_string_pretty(&result).unwrap());
+        println!("{}", serde_json::to_string_pretty(&result).expect("failed to serialize discovery result"));
         return;
     }
 
