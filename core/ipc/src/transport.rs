@@ -112,7 +112,7 @@ mod tests {
 
         // Either timed out or the connection was refused — both are acceptable failures.
         assert!(
-            result.is_err() || result.unwrap().is_err(),
+            result.as_ref().map_or(true, Result::is_err),
             "expected connection failure"
         );
         assert!(
@@ -135,7 +135,7 @@ mod tests {
             path: socket_path.clone(),
             max_connections: 4,
         };
-        let server = IpcServer::bind(config).unwrap();
+        let server = IpcServer::bind(config).expect("failed to bind IPC server");
         let server_path = server.local_path().to_path_buf();
 
         let accept_task = tokio::spawn(async move {

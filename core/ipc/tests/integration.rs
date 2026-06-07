@@ -45,28 +45,28 @@ async fn connect_client(socket_path: &std::path::Path) -> BridgeCodec {
 
 #[tokio::test]
 async fn test_event_send_receive() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().expect("failed to create temp dir");
     let socket_path = dir.path().join("test.sock");
 
     let config = SocketConfig {
         path: socket_path.clone(),
         max_connections: 8,
     };
-    let server = IpcServer::bind(config).unwrap();
+    let server = IpcServer::bind(config).expect("failed to bind IPC server");
 
     let server_path = server.local_path().to_path_buf();
 
     tokio::spawn(async move {
-        let (mut codec, _fd) = server.accept().await.unwrap();
-        let msg = codec.recv().await.unwrap();
+        let (mut codec, _fd) = server.accept().await.expect("failed to accept connection");
+        let msg = codec.recv().await.expect("failed to receive message");
         match msg {
             IpcMessage::Event { source, payload, .. } => {
                 assert_eq!(source, "test-agent");
                 let event: UniversalEvent =
-                    serde_json::from_value(payload).unwrap();
+                    serde_json::from_value(payload).expect("failed to deserialize event");
                 assert_eq!(event.session_id, "test-session");
                 let response = IpcMessage::new_response(Uuid::new_v4(), None);
-                codec.send(&response).await.unwrap();
+                codec.send(&response).await.expect("failed to send response");
             }
             _ => panic!("expected Event message"),
         }
@@ -76,29 +76,29 @@ async fn test_event_send_receive() {
 
     let mut client = connect_client(&server_path).await;
     let event = make_event();
-    let payload = serde_json::to_value(&event).unwrap();
+    let payload = serde_json::to_value(&event).expect("failed to serialize event");
     let msg = IpcMessage::new_event("test-agent", payload);
-    client.send(&msg).await.unwrap();
+    client.send(&msg).await.expect("failed to send event message");
 
-    let response = client.recv().await.unwrap();
+    let response = client.recv().await.expect("failed to receive response");
     assert!(matches!(response, IpcMessage::Response { .. }));
 }
 
 #[tokio::test]
 async fn test_command_response_ping() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().expect("failed to create temp dir");
     let socket_path = dir.path().join("ping.sock");
 
     let config = SocketConfig {
         path: socket_path.clone(),
         max_connections: 8,
     };
-    let server = IpcServer::bind(config).unwrap();
+    let server = IpcServer::bind(config).expect("failed to bind IPC server");
     let server_path = server.local_path().to_path_buf();
 
     tokio::spawn(async move {
-        let (mut codec, _fd) = server.accept().await.unwrap();
-        let msg = codec.recv().await.unwrap();
+        let (mut codec, _fd) = server.accept().await.expect("failed to accept connection");
+        let msg = codec.recv().await.expect("failed to receive message");
         match msg {
             IpcMessage::Command { id, command, .. } => {
                 match command {
@@ -107,11 +107,11 @@ async fn test_command_response_ping() {
                             id,
                             Some(serde_json::json!({"pong": true})),
                         );
-                        codec.send(&response).await.unwrap();
+                        codec.send(&response).await.expect("failed to send response");
                     }
                     _ => {
                         let err = IpcMessage::new_error(id, "unexpected".to_string());
-                        codec.send(&err).await.unwrap();
+                        codec.send(&err).await.expect("failed to send error response");
                     }
                 }
             }
@@ -123,9 +123,9 @@ async fn test_command_response_ping() {
 
     let mut client = connect_client(&server_path).await;
     let cmd = IpcMessage::new_command(IpcCommand::Ping);
-    client.send(&cmd).await.unwrap();
+    client.send(&cmd).await.expect("failed to send command");
 
-    let response = client.recv().await.unwrap();
+    let response = client.recv().await.expect("failed to receive response");
     match response {
         IpcMessage::Response { status, data, .. } => {
             assert_eq!(status, agentos_ipc::IpcStatus::Ok);
@@ -137,19 +137,19 @@ async fn test_command_response_ping() {
 
 #[tokio::test]
 async fn test_subscribe_event_flow() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().expect("failed to create temp dir");
     let socket_path = dir.path().join("sub.sock");
 
     let config = SocketConfig {
         path: socket_path.clone(),
         max_connections: 8,
     };
-    let server = IpcServer::bind(config).unwrap();
+    let server = IpcServer::bind(config).expect("failed to bind IPC server");
     let server_path = server.local_path().to_path_buf();
 
     tokio::spawn(async move {
-        let (mut codec, _fd) = server.accept().await.unwrap();
-        let msg = codec.recv().await.unwrap();
+        let (mut codec, _fd) = server.accept().await.expect("failed to accept connection");
+        let msg = codec.recv().await.expect("failed to receive message");
         assert!(matches!(msg, IpcMessage::Subscribe { .. }));
 
         let event = make_event();
@@ -159,7 +159,7 @@ async fn test_subscribe_event_flow() {
             session: None,
             timestamp: Utc::now(),
         };
-        codec.send(&sub_msg).await.unwrap();
+        codec.send(&sub_msg).await.expect("failed to send subscription event");
     });
 
     tokio::time::sleep(Duration::from_millis(50)).await;
@@ -169,9 +169,9 @@ async fn test_subscribe_event_flow() {
         channel: "sessions".to_string(),
         timestamp: Utc::now(),
     };
-    client.send(&sub).await.unwrap();
+    client.send(&sub).await.expect("failed to send subscribe message");
 
-    let response = client.recv().await.unwrap();
+    let response = client.recv().await.expect("failed to receive response");
     match response {
         IpcMessage::SubscriptionEvent { channel, event, .. } => {
             assert_eq!(channel, "sessions");
@@ -184,18 +184,18 @@ async fn test_subscribe_event_flow() {
 
 #[tokio::test]
 async fn test_max_message_size_enforced() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().expect("failed to create temp dir");
     let socket_path = dir.path().join("msgsize.sock");
 
     let config = SocketConfig {
         path: socket_path.clone(),
         max_connections: 8,
     };
-    let server = IpcServer::bind(config).unwrap();
+    let server = IpcServer::bind(config).expect("failed to bind IPC server");
     let server_path = server.local_path().to_path_buf();
 
     tokio::spawn(async move {
-        let (mut codec, _fd) = server.accept().await.unwrap();
+        let (mut codec, _fd) = server.accept().await.expect("failed to accept connection");
         let result = codec.recv().await;
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -206,6 +206,7 @@ async fn test_max_message_size_enforced() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let mut client = connect_client(&server_path).await;
+    #[allow(clippy::disallowed_methods)]
     let large_payload = serde_json::json!({"data": "x".repeat(2_000_000)});
     let oversized = IpcMessage::new_event("test", large_payload);
     let result = client.send(&oversized).await;
@@ -232,28 +233,29 @@ async fn test_max_message_size_enforced() {
 
 #[tokio::test]
 async fn test_multiple_clients() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().expect("failed to create temp dir");
     let socket_path = dir.path().join("multi.sock");
 
     let config = SocketConfig {
         path: socket_path.clone(),
         max_connections: 8,
     };
-    let server = IpcServer::bind(config).unwrap();
+    let server = IpcServer::bind(config).expect("failed to bind IPC server");
     let server_path = server.local_path().to_path_buf();
 
     let num_clients = 3;
 
     tokio::spawn(async move {
         for i in 0..num_clients {
-            let (mut codec, _fd) = server.accept().await.unwrap();
-            let msg = codec.recv().await.unwrap();
+            let (mut codec, _fd) = server.accept().await.expect("failed to accept connection");
+            let msg = codec.recv().await.expect("failed to receive message");
             if let IpcMessage::Command { id, .. } = msg {
                 let response = IpcMessage::new_response(
                     id,
+                    #[allow(clippy::disallowed_methods)]
                     Some(serde_json::json!({"client": i})),
                 );
-                codec.send(&response).await.unwrap();
+                codec.send(&response).await.expect("failed to send response");
             }
         }
     });
@@ -263,22 +265,22 @@ async fn test_multiple_clients() {
     for _ in 0..num_clients {
         let mut client = connect_client(&server_path).await;
         let cmd = IpcMessage::new_command(IpcCommand::Ping);
-        client.send(&cmd).await.unwrap();
-        let response = client.recv().await.unwrap();
+        client.send(&cmd).await.expect("failed to send command");
+        let response = client.recv().await.expect("failed to receive response");
         assert!(matches!(response, IpcMessage::Response { .. }));
     }
 }
 
 #[tokio::test]
 async fn test_malformed_json_does_not_crash_server() {
-    let dir = tempfile::tempdir().unwrap();
+    let dir = tempfile::tempdir().expect("failed to create temp dir");
     let socket_path = dir.path().join("malformed.sock");
 
     let config = SocketConfig {
         path: socket_path.clone(),
         max_connections: 8,
     };
-    let server = IpcServer::bind(config).unwrap();
+    let server = IpcServer::bind(config).expect("failed to bind IPC server");
     let server_path = server.local_path().to_path_buf();
 
     tokio::spawn(async move {
@@ -314,19 +316,19 @@ async fn test_malformed_json_does_not_crash_server() {
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     {
-        let stream = UnixStream::connect(&server_path).await.unwrap();
+        let stream = UnixStream::connect(&server_path).await.expect("failed to connect to server");
         let (_, mut wr) = stream.into_split();
-        wr.write_all(b"not json at all\n").await.unwrap();
-        wr.shutdown().await.unwrap();
+        wr.write_all(b"not json at all\n").await.expect("failed to write malformed data");
+        wr.shutdown().await.expect("failed to shutdown writer");
     }
 
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let mut client = connect_client(&server_path).await;
     let cmd = IpcMessage::new_command(IpcCommand::Ping);
-    client.send(&cmd).await.unwrap();
+    client.send(&cmd).await.expect("failed to send command");
 
-    let response = client.recv().await.unwrap();
+    let response = client.recv().await.expect("failed to receive response");
     match response {
         IpcMessage::Response { status, data, .. } => {
             assert_eq!(status, agentos_ipc::IpcStatus::Ok);
