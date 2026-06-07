@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useSessionStore } from "../stores/sessionStore";
-import { motion, AnimatePresence, useMotionValue, useTransform, animate } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { useDaemonConnection } from "../hooks/useDaemonConnection";
 import { useCursorEvents } from "../hooks/useCursorEvents";
 import { getAgentColor, getAgentDisplayName } from "@agentos/shared-schema";
@@ -8,18 +8,7 @@ import type { AgentSession } from "@agentos/shared-schema";
 import { Dashboard } from "./Dashboard";
 import { SessionRow } from "./SessionRow";
 import { PhaseDot } from "./PhaseDot";
-
-function AnimatedNumber({ value, duration = 0.6 }: { value: number; duration?: number }) {
-const count = useMotionValue(0);
-const rounded = useTransform(() => Math.round(count.get()).toLocaleString());
-
-useEffect(() => {
-const controls = animate(count, value, { duration, ease: "easeOut" });
-return controls.stop;
-}, [value]);
-
-return <motion.span>{rounded}</motion.span>;
-}
+import { TokenBars } from "./TokenBars";
 
 function AgentIcon({ agent, size = 22 }: { agent: string; size?: number }) {
 const color = getAgentColor(agent);
@@ -69,17 +58,6 @@ best = s;
 return best;
 }
 
-type PillBorderState = "offline" | "idle" | "running" | "waiting_permission" | "waiting_question" | "failed";
-
-const BORDER_COLORS: Record<PillBorderState, string> = {
-offline: "rgba(239,68,68,0.3)",
-idle: "rgba(255,255,255,0.05)",
-running: "rgba(255,255,255,0.07)",
-waiting_permission: "rgba(245,158,11,0.2)",
-waiting_question: "rgba(245,158,11,0.2)",
-failed: "rgba(239,68,68,0.25)",
-};
-
 const HOVER_GRACE_MS = 80;
 
 const safeInvoke = async (cmd: string, args?: any) => {
@@ -103,7 +81,6 @@ const [isDragging, setIsDragging] = useState(false);
 const [stopAllConfirm, setStopAllConfirm] = useState(false);
 const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 const containerRef = useRef<HTMLDivElement>(null);
-const lastSize = useRef({ width: 364, height: 78 });
 const shrinkTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 const currentWindowSize = useRef({ width: 364, height: 78 });
 
@@ -157,15 +134,14 @@ useEffect(() => {
 useEffect(() => {
   if (!containerRef.current || typeof ResizeObserver === "undefined") return;
 
-  const resizeObserver = new ResizeObserver((entries) => {
-    for (const entry of entries) {
+  const resizeObserver = new ResizeObserver(() => {
       const element = containerRef.current;
-      if (!element) continue;
+      if (!element) return;
 
       const width = element.offsetWidth;
       const height = element.offsetHeight;
 
-      if (width === 0 || height === 0) continue;
+      if (width === 0 || height === 0) return;
 
       if (shrinkTimeoutRef.current) {
         clearTimeout(shrinkTimeoutRef.current);
@@ -181,7 +157,6 @@ useEffect(() => {
           safeInvoke("update_window_size", { width, height });
         }, 350);
       }
-    }
   });
 
   resizeObserver.observe(containerRef.current);
@@ -198,29 +173,16 @@ if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
 }, []);
 
 const activeSessions = Array.from(sessions.values()).filter((s) =>
-["running", "waiting_permission", "waiting_question"].includes(s.phase)
+  ["running", "waiting_permission", "waiting_question"].includes(s.phase)
 );
 
 const prioritySession = pickPrioritySession(activeSessions);
 const extraCount = activeSessions.length - 1;
 
-const pillState: PillBorderState = !connected
-? "offline"
-: !prioritySession
-? "idle"
-: prioritySession.phase === "waiting_permission"
-? "waiting_permission"
-: prioritySession.phase === "waiting_question"
-? "waiting_question"
-: prioritySession.phase === "failed"
-? "failed"
-: "running";
-
-// Instantly pre-allocate physical window space on state transitions
 useEffect(() => {
   const expandWindow = async () => {
-    let targetWidth = 340;
-    let targetHeight = 54;
+    let targetWidth: number;
+    let targetHeight: number;
 
     if (isExpanded) {
       targetWidth = 720;
@@ -295,16 +257,6 @@ const handleStopAll = async () => {
   setStopAllConfirm(false);
 };
 
-const handleSessionClick = (session: AgentSession) => {
-    if (session.permission || session.question) {
-      setPendingOverlay(session);
-      return;
-    }
-    if (session.jump_target || session.terminal) {
-      safeInvoke("jump_to_session", { sessionId: session.id });
-    }
-  };
-
 const targetWidth = isExpanded ? 720 : 420;
 
 return (
@@ -341,17 +293,14 @@ onBlur={() => setIsFocused(false)}
 <div className="flex items-center gap-3 px-5 py-3 min-h-[52px]">
 {prioritySession ? (
 <>
-  {/* AgentIcon of priority session */}
   <AnimatePresence mode="popLayout">
     <AgentIcon key={prioritySession.agent} agent={prioritySession.agent} size={22} />
   </AnimatePresence>
 
-  {/* PhaseDot */}
   <div className="flex-shrink-0">
     <PhaseDot phase={prioritySession.phase} />
   </div>
 
-  {/* Agent Info */}
   <div className="flex items-center gap-2 overflow-hidden min-w-0">
     <motion.span
       layout
@@ -367,7 +316,7 @@ onBlur={() => setIsFocused(false)}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -6 }}
         transition={{ duration: 0.2 }}
-        className="text-[11px] text-white/35 font-medium whitespace-nowrap"
+        className="text-[11px] text-white/35 font-medium whitespace-nowrap hidden sm:inline"
       >
         — {phaseLabel}
       </motion.span>
@@ -376,14 +325,18 @@ onBlur={() => setIsFocused(false)}
 
   <div className="flex-1" />
 
-  {/* Extra count badge */}
+  <TokenBars
+    key={`tb-${prioritySession.id}`}
+    tokensConsumed={prioritySession.tokens_input + prioritySession.tokens_output}
+    model={prioritySession.model}
+  />
+
   {extraCount > 0 && (
     <span className="text-[10px] font-semibold text-white/50 whitespace-nowrap px-2 py-0.5 rounded-full bg-white/[0.06] border border-white/[0.08]">
       +{extraCount}
     </span>
   )}
 
-  {/* Permission/Question badge */}
   <AnimatePresence>
     {(hasAnyPermission || hasAnyQuestion) && (
       <motion.div
@@ -401,7 +354,6 @@ onBlur={() => setIsFocused(false)}
 </>
 ) : (
 <>
-  {/* PhaseDot */}
   <div className="flex-shrink-0">
     <PhaseDot phase={connected ? "completed" : "failed"} />
   </div>
@@ -451,7 +403,6 @@ className="overflow-hidden border-t border-white/[0.06]"
     ))}
   </div>
 
-  {/* Bottom actions */}
   <div className="flex gap-2 pt-3 border-t border-white/[0.06] mt-2">
     <button
       onClick={() => setExpanded(true)}

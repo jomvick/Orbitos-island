@@ -22,7 +22,7 @@ vi.mock("framer-motion", () => {
             {},
             {
               get: (_t, tag) => {
-                const Tag = tag;
+                const Tag = tag as string;
                 return React.forwardRef(
                   ({ initial, animate, exit, transition, layout, whileHover, whileTap, variants, custom, ...rest }: any, ref: any) =>
                     React.createElement(Tag, { ...rest, ref })
@@ -34,7 +34,7 @@ vi.mock("framer-motion", () => {
         if (typeof prop === "string" && prop[0] === prop[0].toUpperCase()) {
           return React.forwardRef(
             ({ initial, animate, exit, transition, layout, whileHover, whileTap, variants, custom, ...rest }: any, ref: any) =>
-              React.createElement(prop, { ...rest, ref })
+              React.createElement(prop as string, { ...rest, ref })
           );
         }
         return vi.fn();
@@ -42,8 +42,8 @@ vi.mock("framer-motion", () => {
     }
   );
   return {
-    AnimatePresence: proxy.AnimatePresence,
-    motion: proxy.motion,
+    AnimatePresence: (proxy as any).AnimatePresence,
+    motion: (proxy as any).motion,
     useMotionValue: () => ({ get: () => 0, set: () => {} }),
     useTransform: (fn: any) => (typeof fn === "function" ? fn() : "0"),
     animate: () => ({ stop: () => {} }),

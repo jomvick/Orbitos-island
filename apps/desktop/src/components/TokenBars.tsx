@@ -6,8 +6,6 @@ interface TokenBarsProps {
   maxTokens?: number;
 }
 
-const HEIGHTS = [4, 6, 8, 10, 12];
-
 const TOKEN_LIMITS: Record<string, number> = {
   "opus-4": 1_000_000,
   "sonnet": 200_000,
@@ -22,29 +20,27 @@ export function TokenBars({ tokensConsumed, model, maxTokens }: TokenBarsProps) 
       Object.keys(TOKEN_LIMITS).find((k) => model?.toLowerCase().includes(k)) ?? "default"
     ];
 
-  const filled = Math.round(Math.min(tokensConsumed / dynamicMax, 1) * HEIGHTS.length);
-  const clamped = Math.max(0, Math.min(filled, HEIGHTS.length));
+  const ratio = Math.min(tokensConsumed / dynamicMax, 1);
+  const clamped = Math.max(0, ratio);
 
   return (
     <motion.div
-      initial={{ width: 0, opacity: 0 }}
-      animate={{ width: "auto", opacity: 1 }}
-      exit={{ width: 0, opacity: 0 }}
+      initial={{ opacity: 0, scaleX: 0 }}
+      animate={{ opacity: 1, scaleX: 1 }}
+      exit={{ opacity: 0, scaleX: 0 }}
       transition={{ duration: 0.3, ease: "easeInOut" }}
-      className="flex items-end gap-[2px] overflow-hidden"
+      style={{ transformOrigin: "right center" }}
+      className="w-12 h-1 rounded-full bg-white/[0.08] overflow-hidden shrink-0"
     >
-      {HEIGHTS.map((h, i) => (
-        <div
-          key={i}
-          className="w-[3px] rounded-full overflow-hidden"
-          style={{
-            height: h,
-            backgroundColor: i < clamped ? "rgba(255,255,255,0.6)" : "rgba(255,255,255,0.08)",
-            transition: "background-color 0.4s ease",
-            transitionDelay: `${i * 0.05}s`,
-          }}
-        />
-      ))}
+      <motion.div
+        className="h-full rounded-full bg-gradient-to-r from-white/40 to-white/70"
+        initial={{ width: 0 }}
+        animate={{ width: `${clamped * 100}%` }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
+        style={{
+          boxShadow: "0 0 6px rgba(255,255,255,0.15)",
+        }}
+      />
     </motion.div>
   );
 }
